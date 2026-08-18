@@ -1,0 +1,30 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Node / Vue
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
