@@ -36,7 +36,7 @@ const handleLogin = () => {
     <h1>Login</h1>
     <p>Sign in to your FitCloud account.</p>
 
-    <<form @submit.prevent="handleLogin" novalidate>
+    <form @submit.prevent="handleLogin" novalidate>
       <div class="form-group">
         <label for="email">Email</label>
         <input id="email" type="email" v-model="email" />
