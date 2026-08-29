@@ -1,15 +1,21 @@
 <script setup>
 import { ref } from 'vue'
+import { signUp, confirmSignUp } from 'aws-amplify/auth'
+import { useRouter } from 'vue-router'
 
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 
+const confirmationCode = ref('')
+const needsConfirmation = ref(false)
+
 const emailError = ref('')
 const passwordError = ref('')
 const confirmPasswordError = ref('')
+const router = useRouter()
 
-const handleRegister = () => {
+const handleRegister = async () => {
   emailError.value = ''
   passwordError.value = ''
   confirmPasswordError.value = ''
@@ -40,18 +46,60 @@ const handleRegister = () => {
     confirmPasswordError.value
   ) {
     return
+  }
+
+  try {
+    const result = await signUp({
+      username: email.value,
+      password: password.value,
+      options: {
+        userAttributes: {
+          email: email.value,
+        },
+      },
+    })
+
+    console.log('Sign up result:', result)
+
+    if (result.nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
+      needsConfirmation.value = true
+    }
+  } catch (error) {
+    console.error('Sign up error:', error)
+  }
 }
 
-console.log('Register validation passed')
+const handleConfirm = async () => {
+  try {
+    const result = await confirmSignUp({
+      username: email.value,
+      confirmationCode: confirmationCode.value,
+    })
+
+    console.log('Confirmation result:', result)
+
+    if (result.isSignUpComplete) {
+      console.log('Registration completed!')
+      router.push('/login')
+    }
+  } catch (error) {
+    console.error('Confirmation error:', error)
+  }
 }
 </script>
 
 <template>
   <main class="register-page">
     <h1>Create Account</h1>
-    <p>Create your FitCloud account.</p>
+    <p v-if="!needsConfirmation">
+      Create your FitCloud account.
+    </p>
 
-    <form @submit.prevent="handleRegister" novalidate>
+    <form
+      v-if="!needsConfirmation"
+      @submit.prevent="handleRegister"
+      novalidate
+    >
       <div class="form-group">
         <label for="email">Email</label>
         <input id="email" type="email" v-model="email" />
@@ -85,6 +133,28 @@ console.log('Register validation passed')
 
       <button type="submit">Register</button>
     </form>
+
+    <div v-else class="confirmation">
+      <h2>Verify your email</h2>
+
+      <p>
+        We sent a verification code to {{ email }}.
+      </p>
+
+      <div class="form-group">
+        <label for="confirmation-code">Verification Code</label>
+
+        <input
+          id="confirmation-code"
+          type="text"
+          v-model="confirmationCode"
+        />
+      </div>
+
+      <button type="button" @click="handleConfirm">
+        Confirm
+      </button>
+    </div>
   </main>
 </template>
 
