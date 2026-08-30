@@ -1,5 +1,26 @@
 <script setup>
-import { RouterLink } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
+import { getCurrentUser, signOut } from 'aws-amplify/auth'
+
+const router = useRouter()
+
+const isLoggedIn = ref(false)
+
+onMounted(async () => {
+  try {
+    await getCurrentUser()
+    isLoggedIn.value = true
+  } catch {
+    isLoggedIn.value = false
+  }
+})
+
+const handleLogout = async () => {
+  await signOut()
+  isLoggedIn.value = false
+  router.push('/login')
+}
 </script>
 
 <template>
@@ -9,8 +30,23 @@ import { RouterLink } from 'vue-router'
     <p>Track your fitness. Understand your nutrition. See your progress.</p>
 
     <div class="actions">
-      <RouterLink class="button" to="/login">Login</RouterLink>
-      <RouterLink class="button" to="/register">Create Account</RouterLink>
+      <template v-if="!isLoggedIn">
+        <RouterLink class="button" to="/login">
+          Login
+        </RouterLink>
+
+        <RouterLink class="button" to="/register">
+          Create Account
+        </RouterLink>
+      </template>
+
+      <button
+        v-else
+        type="button"
+        @click="handleLogout"
+      >
+        Logout
+      </button>
     </div>
   </main>
 </template>

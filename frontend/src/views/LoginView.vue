@@ -1,5 +1,7 @@
 <script setup>
 import { ref } from 'vue'
+import { signIn } from 'aws-amplify/auth'
+import { useRouter } from 'vue-router'
 
 const email = ref('')
 const password = ref('')
@@ -7,7 +9,9 @@ const password = ref('')
 const emailError = ref('')
 const passwordError = ref('')
 
-const handleLogin = () => {
+const router = useRouter()
+
+const handleLogin = async () => {
   emailError.value = ''
   passwordError.value = ''
 
@@ -25,9 +29,30 @@ const handleLogin = () => {
     passwordError.value = 'Password must be at least 8 characters.'
   }
 
-  if (!emailError.value && !passwordError.value) {
-  console.log('Login validation passed')
+  if (emailError.value || passwordError.value) {
+  return
 }
+
+  try {
+    const result = await signIn({
+      username: email.value,
+      password: password.value,
+    })
+
+    console.log('Sign in result:', result)
+
+    if (result.isSignedIn) {
+      console.log('Login successful!')
+      router.push('/dashboard')
+    }
+  } catch (error) {
+    console.error('Sign in error:', error)
+  }
+}
+
+const handleLogout = async () => {
+  await signOut()
+  console.log('Logged out')
 }
 </script>
 
@@ -55,12 +80,19 @@ const handleLogin = () => {
         </p>
       </div>
 
-      <button type="submit">Login</button>
+      <div class="actions">
+        <button type="submit">Login</button>
+      </div>
     </form>
   </main>
 </template>
 
 <style scoped>
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
 .login-page {
   max-width: 400px;
   margin: 60px auto;
