@@ -1,5 +1,5 @@
 <script setup>
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { signOut } from 'aws-amplify/auth'
 
 const router = useRouter()
@@ -16,9 +16,9 @@ const handleLogout = async () => {
     <p>Welcome to your FitCloud dashboard.</p>
 
     <div class="dashboard-actions">
-      <button type="button">
+      <RouterLink class="button" to="/workout">
         Today's Workout
-      </button>
+      </RouterLink>
 
       <button type="button">
         Nutrition
@@ -40,5 +40,12 @@ const handleLogout = async () => {
   display: flex;
   gap: 12px;
   margin: 24px 0;
+}
+.button {
+  padding: 10px 16px;
+  background: #2563eb;
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
 }
 </style>
