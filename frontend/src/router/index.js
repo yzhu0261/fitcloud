@@ -42,6 +42,11 @@ const router = createRouter({
         requiresAuth: true,
       },
     },
+    {
+      path: '/nutrition',
+      name: 'nutrition',
+      component: () => import('../views/NutritionView.vue'),
+    },
   ],
 })
 

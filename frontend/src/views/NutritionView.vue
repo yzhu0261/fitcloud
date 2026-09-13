@@ -1,236 +1,63 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { signOut, fetchAuthSession } from 'aws-amplify/auth'
+import { signOut } from 'aws-amplify/auth'
 
 const router = useRouter()
-
-// Store workout data loaded from the backend.
-const workouts = ref([])
 
 // Sign the current user out and return to the login page.
 const handleLogout = async () => {
   await signOut()
   router.push('/login')
 }
-
-// Load the current user's workout history from the backend.
-const loadWorkouts = async () => {
-  const session = await fetchAuthSession()
-  const idToken = session.tokens?.idToken?.toString()
-
-  const response = await fetch(
-    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-    }
-  )
-
-  const data = await response.json()
-
-  workouts.value = data
-
-  console.log('Dashboard workouts:', workouts.value)
-}
-
-// Calculate the total number of exercises across all saved workouts.
-const totalExercises = computed(() => {
-  return workouts.value.reduce((total, workout) => {
-    return total + workout.exercises.length
-  }, 0)
-})
-
-// Find the date of the most recently saved workout.
-const latestWorkout = computed(() => {
-  if (workouts.value.length === 0) {
-    return 'No workouts'
-  }
-
-  const dates = workouts.value.map((workout) => workout.date)
-
-  return dates.sort().reverse()[0]
-})
-
-// Load workout data when the Dashboard page opens.
-onMounted(() => {
-  loadWorkouts()
-})
 </script>
 
 <template>
-  <main class="app-shell">
-    <!-- Sidebar -->
+  <div class="app-shell">
+    <!-- Sidebar navigation. -->
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="brand-mark">F</div>
+          <div class="brand-logo">F</div>
           <span>FitCloud</span>
         </div>
 
         <nav class="nav-menu">
           <RouterLink to="/dashboard" class="nav-item">
-            <span>▦</span>
             Dashboard
           </RouterLink>
 
           <RouterLink to="/workout" class="nav-item">
-            <span>◫</span>
             Workout
           </RouterLink>
 
           <RouterLink to="/nutrition" class="nav-item">
-            <span>◉</span>
             Nutrition
           </RouterLink>
 
           <RouterLink to="/progress" class="nav-item">
-            <span>⌁</span>
             Progress
           </RouterLink>
         </nav>
       </div>
 
-      <div>
-        <div class="sidebar-card">
-          <div class="sidebar-card-icon">✦</div>
-
-          <h3>
-            Train.<br />
-            Track.<br />
-            Improve.
-          </h3>
-
-          <p>
-            Build better habits and keep your progress in one place.
-          </p>
+      <div class="sidebar-bottom">
+        <div class="motivation-card">
+          <p>Train. Track. Improve.</p>
+          <span>Build better habits with FitCloud.</span>
         </div>
 
-        <button
-          type="button"
-          class="logout-button"
-          @click="handleLogout"
-        >
+        <button class="logout-button" @click="handleLogout">
           Logout
         </button>
       </div>
     </aside>
 
-    <!-- Main Content -->
-    <section class="main-content">
-      <header class="topbar">
-        <div>
-          <p class="welcome-label">WELCOME BACK</p>
-          <h1>Dashboard</h1>
-          <p>Here is an overview of your FitCloud activity.</p>
-        </div>
-
-        <div class="profile">
-          <div class="profile-avatar">A</div>
-
-          <div>
-            <strong>My Account</strong>
-            <p>FitCloud Member</p>
-          </div>
-        </div>
-      </header>
-
-      <!-- Display a summary of the user's workout activity. -->
-      <section class="summary-grid">
-        <article class="summary-card blue-card">
-          <p>Total Workouts</p>
-
-          <div class="summary-value">
-            {{ workouts.length }}
-          </div>
-
-          <span>Training sessions saved</span>
-        </article>
-
-        <article class="summary-card yellow-card">
-          <p>Total Exercises</p>
-
-          <div class="summary-value">
-            {{ totalExercises }}
-          </div>
-
-          <span>Exercises recorded</span>
-        </article>
-
-        <article class="summary-card lime-card">
-          <p>Latest Workout</p>
-
-          <div class="summary-date">
-            {{ latestWorkout }}
-          </div>
-
-          <span>Most recent session</span>
-        </article>
-      </section>
-
-      <!-- Main actions -->
-      <section class="feature-grid">
-        <RouterLink to="/workout" class="feature-card">
-          <div class="feature-icon blue-icon">◫</div>
-
-          <div>
-            <h2>Today's Workout</h2>
-            <p>
-              Add exercises, record sets and reps, and save your workout.
-            </p>
-          </div>
-
-          <span class="arrow">→</span>
-        </RouterLink>
-
-        <RouterLink to="/nutrition" class="feature-card">
-          <div class="feature-icon yellow-icon">◉</div>
-
-          <div>
-            <h2>Nutrition</h2>
-            <p>
-              Track meals and keep your nutrition information organised.
-            </p>
-          </div>
-
-          <span class="arrow">→</span>
-        </RouterLink>
-
-        <RouterLink to="/progress" class="feature-card">
-          <div class="feature-icon lime-icon">⌁</div>
-
-          <div>
-            <h2>Progress</h2>
-            <p>
-              Review your training history and monitor your progress.
-            </p>
-          </div>
-
-          <span class="arrow">→</span>
-        </RouterLink>
-      </section>
-
-      <!-- Motivation card -->
-      <section class="motivation-card">
-        <div>
-          <p class="motivation-label">FITCLOUD DAILY</p>
-
-          <h2>Small progress is still progress.</h2>
-
-          <p>
-            Stay consistent, keep tracking, and let your data show how far
-            you've come.
-          </p>
-        </div>
-
-        <RouterLink to="/workout" class="start-button">
-          Start Workout
-        </RouterLink>
-      </section>
-    </section>
-  </main>
+    <!-- Main content. -->
+    <main class="main-content">
+      <h1>Nutrition</h1>
+      <p>Track your daily nutrition here.</p>
+    </main>
+  </div>
 </template>
 
 <style scoped>

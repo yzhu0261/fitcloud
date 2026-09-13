@@ -126,7 +126,7 @@ onMounted(() => {
             Dashboard
           </RouterLink>
 
-          <RouterLink to="/workout" class="nav-item active">
+          <RouterLink to="/workout" class="nav-item">
             <span>◫</span>
             Workout
           </RouterLink>
@@ -498,7 +498,7 @@ onMounted(() => {
   background: #f2f4f6;
 }
 
-.nav-item.active {
+.nav-item.router-link-exact-active {
   background: #e4f58f;
   color: #172033;
   font-weight: 700;
