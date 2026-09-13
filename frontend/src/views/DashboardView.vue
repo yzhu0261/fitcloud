@@ -2,12 +2,38 @@
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut } from 'aws-amplify/auth'
 
+import { onMounted } from 'vue'
+import { fetchAuthSession } from 'aws-amplify/auth'
+
 const router = useRouter()
 
 const handleLogout = async () => {
   await signOut()
   router.push('/login')
 }
+
+const loadWorkouts = async () => {
+  const session = await fetchAuthSession()
+
+  const token = session.tokens?.idToken?.toString()
+
+  const response = await fetch(
+    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  )
+
+  const data = await response.json()
+  console.log('Workouts:', data)
+}
+S
+onMounted(() => {
+  loadWorkouts()
+})
 </script>
 
 <template>

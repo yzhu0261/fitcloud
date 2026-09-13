@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { signIn } from 'aws-amplify/auth'
+import { signIn, fetchAuthSession } from 'aws-amplify/auth'
 import { useRouter } from 'vue-router'
 
 const email = ref('')
@@ -43,6 +43,13 @@ const handleLogin = async () => {
 
     if (result.isSignedIn) {
       console.log('Login successful!')
+
+      const session = await fetchAuthSession()
+
+      console.log('Auth session:', session)
+      console.log('ID token:', session.tokens?.idToken?.toString())
+      console.log('Access token:', session.tokens?.accessToken?.toString())
+
       router.push('/dashboard')
     }
   } catch (error) {
