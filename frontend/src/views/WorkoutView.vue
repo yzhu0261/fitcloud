@@ -77,7 +77,7 @@ const saveWorkout = async () => {
 
   console.log('API response:', result)
 
-  workouts.value.push(workout)
+  await loadWorkouts()
 
   console.log('Saved workouts:', workouts.value)
 }
