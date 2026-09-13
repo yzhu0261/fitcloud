@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { fetchAuthSession } from 'aws-amplify/auth'
 
 const muscleGroup = ref('')
@@ -81,6 +81,31 @@ const saveWorkout = async () => {
 
   console.log('Saved workouts:', workouts.value)
 }
+
+const loadWorkouts = async () => {
+  const session = await fetchAuthSession()
+  const idToken = session.tokens?.idToken?.toString()
+
+  const response = await fetch(
+    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    }
+  )
+
+  const data = await response.json()
+
+  workouts.value = data
+
+  console.log('Loaded workouts:', workouts.value)
+}
+
+onMounted(() => {
+  loadWorkouts()
+})
 
 </script>
 
@@ -174,6 +199,35 @@ const saveWorkout = async () => {
     >
       Save Workout
     </button>
+
+    <hr />
+
+    <h2>Workout History</h2>
+
+    <p v-if="workouts.length === 0">
+      No workouts found.
+    </p>
+
+    <div
+      v-for="workout in workouts"
+      :key="workout.workoutId"
+      class="workout-history"
+    >
+      <h3>{{ workout.date }}</h3>
+
+      <div
+        v-for="(item, index) in workout.exercises"
+        :key="index"
+      >
+        <p>
+          {{ item.exercise }} -
+          {{ item.muscleGroup }} -
+          {{ item.sets }} sets ×
+          {{ item.reps }} reps -
+          {{ item.weight }} kg
+        </p>
+      </div>
+    </div>
 
   </main>
 </template>
