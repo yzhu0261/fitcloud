@@ -204,6 +204,13 @@
             </button>
           </article>
         </div>
+
+        <button
+          class="save-btn"
+          :disabled="foods.length === 0"
+        >
+          Save Nutrition
+        </button>
       </section>
     </main>
   </div>
