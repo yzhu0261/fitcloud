@@ -208,9 +208,14 @@
         <button
           class="save-btn"
           :disabled="foods.length === 0"
+          @click="saveNutrition"
         >
           Save Nutrition
         </button>
+
+        <p v-if="saveMessage" class="save-message">
+          {{ saveMessage }}
+        </p>
       </section>
     </main>
   </div>
@@ -220,6 +225,7 @@
 import { ref, computed } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut } from 'aws-amplify/auth'
+import { fetchAuthSession } from 'aws-amplify/auth'
 
 const router = useRouter()
 
@@ -261,6 +267,9 @@ const totalFat = computed(() => {
 // Store validation error messages.
 const formError = ref('')
 
+// Store the success message after saving nutrition data.
+const saveMessage = ref('')
+
 // Sign the current user out and return to the login page.
 const handleLogout = async () => {
   await signOut()
@@ -270,6 +279,9 @@ const handleLogout = async () => {
 // Add a food record to today's meals.
 const addFood = () => {
   formError.value = ''
+  
+  // Clear the previous save message when starting a new nutrition record.
+  saveMessage.value = ''
 
   if (
     !foodName.value ||
@@ -301,6 +313,42 @@ const addFood = () => {
 // Remove a food record from today's meals.
 const removeFood = (index) => {
   foods.value.splice(index, 1)
+}
+
+const saveNutrition = async () => {
+  const session = await fetchAuthSession()
+
+  const idToken = session.tokens?.idToken?.toString()
+
+  const nutritionData = {
+    date: new Date().toISOString().split('T')[0],
+    foods: foods.value,
+  }
+
+  const response = await fetch(
+    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+    {
+      method: 'POST',
+
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: idToken,
+      },
+
+      body: JSON.stringify(nutritionData),
+    }
+  )
+
+  // Convert the API response from JSON into a JavaScript object.
+  const result = await response.json()
+
+  console.log("Response:", result)
+
+  // Clear today's meal list and show a message after a successful save.
+  if (response.ok) {
+    saveMessage.value = 'Nutrition saved successfully!'
+    foods.value = []
+  }
 }
 </script>
 
