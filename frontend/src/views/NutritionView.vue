@@ -222,7 +222,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut } from 'aws-amplify/auth'
 import { fetchAuthSession } from 'aws-amplify/auth'
@@ -238,6 +238,9 @@ const fat = ref('')
 
 // Store food records added to today's meals.
 const foods = ref([])
+
+// Store nutrition records loaded from the backend.
+const nutritionHistory = ref([])
 
 // Calculate the total nutrition values from today's food records.
 const totalCalories = computed(() => {
@@ -279,7 +282,7 @@ const handleLogout = async () => {
 // Add a food record to today's meals.
 const addFood = () => {
   formError.value = ''
-  
+
   // Clear the previous save message when starting a new nutrition record.
   saveMessage.value = ''
 
@@ -314,6 +317,44 @@ const addFood = () => {
 const removeFood = (index) => {
   foods.value.splice(index, 1)
 }
+
+// Load the current user's saved nutrition records from AWS.
+const loadNutrition = async () => {
+  // Get the current user's Cognito session.
+  const session = await fetchAuthSession()
+
+  // Get the ID token used to prove the user's identity to API Gateway.
+  const idToken = session.tokens?.idToken?.toString()
+
+  // Send a GET request to retrieve this user's nutrition records.
+  const response = await fetch(
+    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+    {
+      method: 'GET',
+
+      // Send the Cognito token so the JWT Authorizer can identify the user.
+      headers: {
+        Authorization: idToken,
+      },
+    }
+  )
+
+  // Convert the JSON response into a JavaScript object.
+  const result = await response.json()
+
+  // Store the returned nutrition records for use on the page.
+  if (response.ok) {
+    nutritionHistory.value = result.nutrition
+
+    // Temporarily check the loaded records in the browser console.
+    console.log('Nutrition history:', nutritionHistory.value)
+  }
+}
+
+// Load saved nutrition records when the Nutrition page opens.
+onMounted(() => {
+  loadNutrition()
+})
 
 const saveNutrition = async () => {
   const session = await fetchAuthSession()
