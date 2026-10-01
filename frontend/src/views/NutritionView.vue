@@ -217,6 +217,53 @@
           {{ saveMessage }}
         </p>
       </section>
+
+      <!-- Display saved nutrition history from AWS. -->
+      <section class="content-card history-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">HISTORY</p>
+            <h2>Nutrition History</h2>
+          </div>
+
+          <span class="food-count">
+            {{ nutritionHistory.length }} records
+          </span>
+        </div>
+
+        <!-- Show this message when the user has no saved nutrition records. -->
+        <div v-if="nutritionHistory.length === 0" class="empty-state">
+          <p>No nutrition history yet.</p>
+          <span>Saved nutrition records will appear here.</span>
+        </div>
+
+        <!-- Display each saved nutrition record. -->
+        <div v-else class="history-list">
+          <article
+            v-for="record in nutritionHistory"
+            :key="record.nutritionId"
+            class="history-item"
+          >
+            <h3>{{ record.date }}</h3>
+
+            <!-- Display every food stored inside this nutrition record. -->
+            <div
+              v-for="(food, index) in record.foods"
+              :key="index"
+              class="history-food"
+            >
+              <span>{{ food.foodName }}</span>
+
+              <span>
+                {{ food.calories }} kcal ·
+                P {{ food.protein }}g ·
+                C {{ food.carbs }}g ·
+                F {{ food.fat }}g
+              </span>
+            </div>
+          </article>
+        </div>
+      </section>
     </main>
   </div>
 </template>
@@ -345,9 +392,6 @@ const loadNutrition = async () => {
   // Store the returned nutrition records for use on the page.
   if (response.ok) {
     nutritionHistory.value = result.nutrition
-
-    // Temporarily check the loaded records in the browser console.
-    console.log('Nutrition history:', nutritionHistory.value)
   }
 }
 
@@ -383,12 +427,13 @@ const saveNutrition = async () => {
   // Convert the API response from JSON into a JavaScript object.
   const result = await response.json()
 
-  console.log("Response:", result)
-
   // Clear today's meal list and show a message after a successful save.
   if (response.ok) {
     saveMessage.value = 'Nutrition saved successfully!'
     foods.value = []
+
+    // Reload nutrition history so the newly saved record appears immediately.
+    await loadNutrition()
   }
 }
 </script>
@@ -710,6 +755,38 @@ const saveNutrition = async () => {
   border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
+}
+
+/* Nutrition history */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.history-item {
+  padding: 18px;
+  background: #f7f8f9;
+  border-radius: 16px;
+}
+
+.history-item h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.history-food {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 0;
+  color: #687083;
+  font-size: 0.9rem;
+}
+
+.history-food + .history-food {
+  border-top: 1px solid #e5e7eb;
 }
 
 /* Responsive layout */
