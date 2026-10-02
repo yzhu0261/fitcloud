@@ -244,7 +244,18 @@
             :key="record.nutritionId"
             class="history-item"
           >
-            <h3>{{ record.date }}</h3>
+            <!-- Display the record date and delete button. -->
+            <div class="history-header">
+              <h3>{{ record.date }}</h3>
+
+              <button
+                type="button"
+                class="delete-history-button"
+                @click="deleteNutrition(record.nutritionId)"
+              >
+                Delete
+              </button>
+            </div>
 
             <!-- Display every food stored inside this nutrition record. -->
             <div
@@ -433,6 +444,33 @@ const saveNutrition = async () => {
     foods.value = []
 
     // Reload nutrition history so the newly saved record appears immediately.
+    await loadNutrition()
+  }
+}
+
+// Delete one saved nutrition record from AWS.
+const deleteNutrition = async (nutritionId) => {
+  // Get the current user's Cognito session.
+  const session = await fetchAuthSession()
+
+  // Get the ID token used by API Gateway to verify the user.
+  const idToken = session.tokens?.idToken?.toString()
+
+  // Send a DELETE request for the selected nutrition record.
+  const response = await fetch(
+    `https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition/${nutritionId}`,
+    {
+      method: 'DELETE',
+
+      // Send the Cognito token so the JWT Authorizer can identify the user.
+      headers: {
+        Authorization: idToken,
+      },
+    }
+  )
+
+  // Reload nutrition history after the record is successfully deleted.
+  if (response.ok) {
     await loadNutrition()
   }
 }
@@ -787,6 +825,24 @@ const saveNutrition = async () => {
 
 .history-food + .history-food {
   border-top: 1px solid #e5e7eb;
+}
+
+/* Header for each saved nutrition record. */
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* Delete button for a saved nutrition record. */
+.delete-history-button {
+  border: none;
+  background: #ffffff;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
 }
 
 /* Responsive layout */
