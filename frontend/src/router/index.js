@@ -6,6 +6,7 @@ import RegisterView from '../views/RegisterView.vue'
 import DashboardView from '../views/DashboardView.vue'
 import { getCurrentUser } from 'aws-amplify/auth'
 import WorkoutView from '../views/WorkoutView.vue'
+import ProgressView from '../views/ProgressView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -46,6 +47,17 @@ const router = createRouter({
       path: '/nutrition',
       name: 'nutrition',
       component: () => import('../views/NutritionView.vue'),
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/progress',
+      name: 'progress',
+      component: ProgressView,
+      meta: {
+        requiresAuth: true,
+      },
     },
   ],
 })
