@@ -116,8 +116,8 @@ onMounted(() => {
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="brand-mark">F</div>
-          <span>FitCloud</span>
+          <div class="brand-mark">R</div>
+          <span>RepVelta</span>
         </div>
 
         <nav class="nav-menu">
@@ -139,6 +139,11 @@ onMounted(() => {
           <RouterLink to="/progress" class="nav-item">
             <span>⌁</span>
             Progress
+          </RouterLink>
+
+          <RouterLink to="/account" class="nav-item">
+            <span>●</span>
+            My Account
           </RouterLink>
         </nav>
       </div>
@@ -166,14 +171,14 @@ onMounted(() => {
           <p>Build your session and track your training progress.</p>
         </div>
 
-        <div class="profile">
+        <RouterLink to="/account" class="profile">
           <div class="profile-avatar">A</div>
 
           <div>
             <strong>My Account</strong>
-            <p>FitCloud Member</p>
+            <p>RepVelta Member</p>
           </div>
-        </div>
+        </RouterLink>
       </header>
 
       <!-- Summary Cards -->
@@ -432,8 +437,8 @@ onMounted(() => {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 230px 1fr;
-  background: #f4f6f8;
+  grid-template-columns: 270px 1fr;
+  background: #f1f5f2;
   color: #172033;
   font-family:
     Inter,
@@ -446,9 +451,9 @@ onMounted(() => {
 
 .sidebar {
   min-height: 100vh;
-  padding: 32px 22px;
+  padding: 36px 28px;
   background: #fffefd;
-  border-right: 1px solid #ebedf0;
+  border-right: 1px solid #dfe8e2;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -457,17 +462,18 @@ onMounted(() => {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 40px;
-  font-size: 1.25rem;
+  gap: 12px;
+  margin-bottom: 46px;
+  font-size: 1.5rem;
   font-weight: 800;
 }
 
 .brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: #e2f58b;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #cbed63;
+  color: #17352c;
   display: grid;
   place-items: center;
   font-weight: 900;
@@ -476,18 +482,18 @@ onMounted(() => {
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 11px 14px;
+  padding: 14px 16px;
   border-radius: 12px;
   text-decoration: none;
-  color: #68707d;
-  font-size: 0.92rem;
+  color: #52615d;
+  font-size: 1.06rem;
   font-weight: 500;
   transition:
     background 0.2s ease,
@@ -495,19 +501,20 @@ onMounted(() => {
 }
 
 .nav-item:hover {
-  background: #f2f4f6;
+  background: #eef4ef;
 }
 
 .nav-item.router-link-exact-active {
-  background: #e4f58f;
-  color: #172033;
+  background: #dff09b;
+  color: #17352c;
   font-weight: 700;
 }
 
 .sidebar-card {
-  padding: 18px;
+  padding: 22px;
   border-radius: 18px;
-  background: #d7ebf8;
+  background: #e5f0e8;
+  border: 1px solid #d4e4d9;
 }
 
 .sidebar-card-icon {
@@ -517,22 +524,22 @@ onMounted(() => {
 
 .sidebar-card h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.45rem;
   line-height: 1.08;
 }
 
 .sidebar-card p {
   margin: 12px 0 0;
-  color: #657180;
-  font-size: 0.78rem;
-  line-height: 1.5;
+  color: #536760;
+  font-size: 1rem;
+  line-height: 1.55;
 }
 
 /* Main */
 
 .main-content {
-  padding: 34px 42px 50px;
-  max-width: 1400px;
+  padding: 42px 50px 60px;
+  max-width: 1500px;
   width: 100%;
   margin: 0 auto;
 }
@@ -542,33 +549,41 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 30px;
-  margin-bottom: 28px;
+  margin-bottom: 34px;
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 2.6rem;
 }
 
 .topbar > div > p {
   margin: 7px 0 0;
   color: #7a8391;
-  font-size: 0.9rem;
+  font-size: 1.1rem;
 }
 
 .profile {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 14px;
+  padding: 11px 16px;
   border-radius: 999px;
   background: #fffefd;
   border: 1px solid #e7e9ed;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.profile:hover {
+  border-color: #b8ca75;
+  transform: translateY(-1px);
 }
 
 .profile-avatar {
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background: #e2f58b;
   display: grid;
@@ -577,12 +592,12 @@ onMounted(() => {
 }
 
 .profile strong {
-  font-size: 0.85rem;
+  font-size: 1rem;
 }
 
 .profile p {
   margin: 2px 0 0;
-  font-size: 0.72rem;
+  font-size: 0.88rem;
   color: #8b93a0;
 }
 
@@ -591,19 +606,19 @@ onMounted(() => {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-bottom: 22px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .summary-card {
-  min-height: 145px;
+  min-height: 180px;
   border-radius: 20px;
-  padding: 22px;
+  padding: 26px;
 }
 
 .summary-card p {
   margin: 0 0 12px;
-  font-size: 0.85rem;
+  font-size: 1.02rem;
   font-weight: 600;
 }
 
@@ -611,21 +626,21 @@ onMounted(() => {
   display: block;
   margin-top: 9px;
   color: #66717f;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
 }
 
 .summary-value {
-  font-size: 2.4rem;
+  font-size: 3rem;
   font-weight: 800;
 }
 
 .summary-text {
-  font-size: 1.45rem;
+  font-size: 1.75rem;
   font-weight: 800;
 }
 
 .blue-card {
-  background: #d8ecf8;
+  background: #dcefea;
 }
 
 .yellow-card {
@@ -642,7 +657,7 @@ onMounted(() => {
   background: #fffefd;
   border: 1px solid #e7e9ec;
   border-radius: 20px;
-  padding: 22px;
+  padding: 28px;
 }
 
 .add-card {
@@ -659,18 +674,18 @@ onMounted(() => {
 
 .card-heading h2 {
   margin: 0;
-  font-size: 1.12rem;
+  font-size: 1.4rem;
 }
 
 .card-heading p {
   margin: 6px 0 0;
   color: #7d8693;
-  font-size: 0.83rem;
+  font-size: 1rem;
 }
 
 .heading-icon {
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background: #e2f58b;
   display: grid;
@@ -700,19 +715,20 @@ onMounted(() => {
 }
 
 .form-group label {
-  font-size: 0.8rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
 .form-group input,
 .form-group select {
   width: 100%;
-  padding: 12px 14px;
+  min-height: 52px;
+  padding: 13px 15px;
   border: 1px solid #dfe3e8;
   border-radius: 12px;
   background: #fbfbfc;
   color: #172033;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease;
@@ -733,10 +749,11 @@ onMounted(() => {
 
 .add-button {
   border: none;
-  padding: 11px 17px;
+  padding: 13px 20px;
   border-radius: 12px;
-  background: #d8ecf8;
-  color: #172033;
+  background: #cbed63;
+  color: #17352c;
+  font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -745,7 +762,7 @@ onMounted(() => {
 }
 
 .add-button:hover {
-  background: #c9e4f5;
+  background: #bfe45a;
   transform: translateY(-1px);
 }
 
@@ -755,7 +772,7 @@ onMounted(() => {
   border-radius: 10px;
   background: #fff1f0;
   color: #b42318;
-  font-size: 0.82rem;
+  font-size: 1rem;
 }
 
 /* Bottom dashboard */
@@ -771,7 +788,7 @@ onMounted(() => {
   padding: 6px 11px;
   border-radius: 999px;
   background: #fff1a8;
-  font-size: 0.75rem;
+  font-size: 0.92rem;
   font-weight: 700;
 }
 
@@ -783,7 +800,7 @@ onMounted(() => {
   background: #e2f58b;
   display: grid;
   place-items: center;
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   font-weight: 800;
 }
 
@@ -811,14 +828,14 @@ onMounted(() => {
 .exercise-title h3,
 .history-exercise h3 {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 1.08rem;
 }
 
 .exercise-row p,
 .history-exercise p {
   margin: 5px 0 0;
   color: #7d8693;
-  font-size: 0.78rem;
+  font-size: 0.98rem;
 }
 
 .muscle-badge {
@@ -826,9 +843,9 @@ onMounted(() => {
   align-items: center;
   padding: 4px 8px;
   border-radius: 999px;
-  background: #d8ecf8;
-  color: #456678;
-  font-size: 0.68rem;
+  background: #dcefea;
+  color: #315e51;
+  font-size: 0.85rem;
   font-weight: 700;
   text-transform: capitalize;
 }
@@ -839,17 +856,18 @@ onMounted(() => {
   color: #c03a2b;
   cursor: pointer;
   font-weight: 700;
-  font-size: 0.75rem;
+  font-size: 0.95rem;
 }
 
 .save-button {
   width: 100%;
   margin-top: 20px;
-  padding: 12px;
+  padding: 14px;
   border: none;
   border-radius: 12px;
-  background: #e2f58b;
-  color: #172033;
+  background: #cbed63;
+  color: #17352c;
+  font-size: 1.02rem;
   font-weight: 800;
   cursor: pointer;
   transition:
@@ -882,7 +900,7 @@ onMounted(() => {
 
 .history-date {
   margin-bottom: 10px;
-  font-size: 0.72rem;
+  font-size: 0.92rem;
   color: #8d95a1;
   font-weight: 700;
 }

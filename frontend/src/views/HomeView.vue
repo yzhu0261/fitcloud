@@ -25,7 +25,7 @@ const handleLogout = async () => {
 
 <template>
   <main class="home">
-    <h1>FitCloud</h1>
+    <h1>RepVelta</h1>
 
     <p>Track your fitness. Understand your nutrition. See your progress.</p>
 
@@ -53,19 +53,48 @@ const handleLogout = async () => {
 
 <style scoped>
 .home {
-  padding: 40px;
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  padding: 48px 24px;
+  background: linear-gradient(135deg, #edf5df 0%, #eef4f1 52%, #e8f1f5 100%);
+  color: #17352c;
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  text-align: center;
+}
+
+.home h1 {
+  margin: 0;
+  font-size: clamp(3.2rem, 7vw, 5.5rem);
+  letter-spacing: -0.05em;
+}
+
+.home > p {
+  max-width: 720px;
+  margin: 22px auto 34px;
+  color: #52615d;
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
+  line-height: 1.6;
 }
 
 .actions {
   display: flex;
+  justify-content: center;
   gap: 12px;
 }
 
-.button {
-  padding: 10px 16px;
-  background: #2563eb;
-  color: white;
+.button,
+.actions button {
+  min-width: 150px;
+  padding: 14px 22px;
+  border: 0;
+  background: #cbed63;
+  color: #17352c;
+  font-size: 1.05rem;
+  font-weight: 800;
   text-decoration: none;
-  border-radius: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(121, 168, 50, 0.18);
 }
 </style>

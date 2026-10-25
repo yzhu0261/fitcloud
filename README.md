@@ -1,6 +1,6 @@
-# FitCloud
+# RepVelta
 
-FitCloud is a serverless fitness tracking and nutrition management web application built on AWS.
+RepVelta is a serverless fitness tracking and nutrition management web application built on AWS.
 
 ## Planned Features
 
@@ -12,6 +12,6 @@ FitCloud is a serverless fitness tracking and nutrition management web applicati
 
 ## Architecture
 
-FitCloud uses a serverless AWS architecture with services including Amazon S3, CloudFront, Cognito, API Gateway, AWS Lambda, DynamoDB, CloudWatch, and IAM.
+RepVelta uses a serverless AWS architecture with services including Amazon S3, CloudFront, Cognito, API Gateway, AWS Lambda, DynamoDB, CloudWatch, and IAM.
 
-![FitCloud AWS Architecture](docs/architecture/fitcloud-aws-architecture.png)
+![RepVelta AWS Architecture](docs/architecture/fitcloud-aws-architecture.png)

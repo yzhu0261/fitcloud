@@ -66,8 +66,8 @@ onMounted(() => {
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="brand-mark">F</div>
-          <span>FitCloud</span>
+          <div class="brand-mark">R</div>
+          <span>RepVelta</span>
         </div>
 
         <nav class="nav-menu">
@@ -89,6 +89,11 @@ onMounted(() => {
           <RouterLink to="/progress" class="nav-item">
             <span>⌁</span>
             Progress
+          </RouterLink>
+
+          <RouterLink to="/account" class="nav-item">
+            <span>●</span>
+            My Account
           </RouterLink>
         </nav>
       </div>
@@ -124,17 +129,17 @@ onMounted(() => {
         <div>
           <p class="welcome-label">WELCOME BACK</p>
           <h1>Dashboard</h1>
-          <p>Here is an overview of your FitCloud activity.</p>
+          <p>Here is an overview of your RepVelta activity.</p>
         </div>
 
-        <div class="profile">
+        <RouterLink to="/account" class="profile">
           <div class="profile-avatar">A</div>
 
           <div>
             <strong>My Account</strong>
-            <p>FitCloud Member</p>
+            <p>RepVelta Member</p>
           </div>
-        </div>
+        </RouterLink>
       </header>
 
       <!-- Display a summary of the user's workout activity. -->
@@ -215,7 +220,7 @@ onMounted(() => {
       <!-- Motivation card -->
       <section class="motivation-card">
         <div>
-          <p class="motivation-label">FITCLOUD DAILY</p>
+          <p class="motivation-label">REPVELTA DAILY</p>
 
           <h2>Small progress is still progress.</h2>
 
@@ -241,8 +246,8 @@ onMounted(() => {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 230px 1fr;
-  background: #f4f6f8;
+  grid-template-columns: 270px 1fr;
+  background: #f1f5f2;
   color: #172033;
   font-family:
     Inter,
@@ -255,9 +260,9 @@ onMounted(() => {
 
 .sidebar {
   min-height: 100vh;
-  padding: 32px 22px;
+  padding: 36px 28px;
   background: #fffefd;
-  border-right: 1px solid #ebedf0;
+  border-right: 1px solid #dfe8e2;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -266,17 +271,18 @@ onMounted(() => {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 40px;
-  font-size: 1.25rem;
+  gap: 12px;
+  margin-bottom: 46px;
+  font-size: 1.5rem;
   font-weight: 800;
 }
 
 .brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: #e2f58b;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #cbed63;
+  color: #17352c;
   display: grid;
   place-items: center;
   font-weight: 900;
@@ -285,35 +291,36 @@ onMounted(() => {
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 11px 14px;
+  padding: 14px 16px;
   border-radius: 12px;
   text-decoration: none;
-  color: #68707d;
-  font-size: 0.92rem;
+  color: #52615d;
+  font-size: 1.06rem;
   font-weight: 500;
 }
 
 .nav-item:hover {
-  background: #f2f4f6;
+  background: #eef4ef;
 }
 
 .nav-item.router-link-exact-active {
-  background: #e4f58f;
-  color: #172033;
+  background: #dff09b;
+  color: #17352c;
   font-weight: 700;
 }
 
 .sidebar-card {
-  padding: 18px;
+  padding: 22px;
   border-radius: 18px;
-  background: #d7ebf8;
+  background: #e5f0e8;
+  border: 1px solid #d4e4d9;
 }
 
 .sidebar-card-icon {
@@ -323,38 +330,39 @@ onMounted(() => {
 
 .sidebar-card h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.45rem;
   line-height: 1.08;
 }
 
 .sidebar-card p {
   margin: 12px 0 0;
-  color: #657180;
-  font-size: 0.78rem;
-  line-height: 1.5;
+  color: #536760;
+  font-size: 1rem;
+  line-height: 1.55;
 }
 
 .logout-button {
   width: 100%;
   margin-top: 18px;
-  padding: 10px;
+  padding: 12px;
   border: none;
   border-radius: 10px;
   background: transparent;
-  color: #68707d;
+  color: #52615d;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .logout-button:hover {
-  background: #f2f4f6;
+  background: #eef4ef;
 }
 
 /* Main */
 
 .main-content {
-  padding: 34px 42px 50px;
-  max-width: 1400px;
+  padding: 42px 50px 60px;
+  max-width: 1500px;
   width: 100%;
   margin: 0 auto;
 }
@@ -364,12 +372,12 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 30px;
-  margin-bottom: 30px;
+  margin-bottom: 34px;
 }
 
 .welcome-label {
   margin: 0 0 7px !important;
-  font-size: 0.72rem !important;
+  font-size: 0.9rem !important;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #8a929f !important;
@@ -377,28 +385,36 @@ onMounted(() => {
 
 .topbar h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 2.6rem;
 }
 
 .topbar > div > p {
   margin: 7px 0 0;
   color: #7a8391;
-  font-size: 0.9rem;
+  font-size: 1.1rem;
 }
 
 .profile {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 14px;
+  padding: 11px 16px;
   border-radius: 999px;
   background: #fffefd;
   border: 1px solid #e7e9ed;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.profile:hover {
+  border-color: #b8ca75;
+  transform: translateY(-1px);
 }
 
 .profile-avatar {
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background: #e2f58b;
   display: grid;
@@ -407,12 +423,12 @@ onMounted(() => {
 }
 
 .profile strong {
-  font-size: 0.85rem;
+  font-size: 1rem;
 }
 
 .profile p {
   margin: 2px 0 0;
-  font-size: 0.72rem;
+  font-size: 0.88rem;
   color: #8b93a0;
 }
 
@@ -421,19 +437,19 @@ onMounted(() => {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-bottom: 22px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .summary-card {
-  min-height: 155px;
+  min-height: 180px;
   border-radius: 20px;
-  padding: 22px;
+  padding: 26px;
 }
 
 .summary-card > p {
-  margin: 0 0 22px;
-  font-size: 0.8rem;
+  margin: 0 0 26px;
+  font-size: 1.02rem;
   font-weight: 700;
 }
 
@@ -446,11 +462,11 @@ onMounted(() => {
   display: block;
   margin-top: 8px;
   color: #66717f;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
 }
 
 .blue-card {
-  background: #d8ecf8;
+  background: #dcefea;
 }
 
 .yellow-card {
@@ -466,13 +482,13 @@ onMounted(() => {
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
+  gap: 20px;
 }
 
 .feature-card {
   position: relative;
-  min-height: 220px;
-  padding: 24px;
+  min-height: 250px;
+  padding: 28px;
   border: 1px solid #e7e9ec;
   border-radius: 20px;
   background: #fffefd;
@@ -489,18 +505,18 @@ onMounted(() => {
 }
 
 .feature-icon {
-  width: 45px;
-  height: 45px;
+  width: 52px;
+  height: 52px;
   margin-bottom: 32px;
   border-radius: 14px;
   display: grid;
   place-items: center;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 800;
 }
 
 .blue-icon {
-  background: #d8ecf8;
+  background: #dcefea;
 }
 
 .yellow-icon {
@@ -513,30 +529,32 @@ onMounted(() => {
 
 .feature-card h2 {
   margin: 0;
-  font-size: 1.08rem;
+  font-size: 1.35rem;
 }
 
 .feature-card p {
   margin: 9px 0 0;
   color: #79828f;
-  font-size: 0.82rem;
-  line-height: 1.55;
+  font-size: 1.02rem;
+  line-height: 1.6;
 }
 
 .arrow {
   position: absolute;
   right: 22px;
   bottom: 20px;
-  font-size: 1.1rem;
+  font-size: 1.35rem;
 }
 
 /* Motivation */
 
 .motivation-card {
-  margin-top: 22px;
-  padding: 28px;
+  margin-top: 24px;
+  padding: 34px;
   border-radius: 20px;
-  background: #172033;
+  background: linear-gradient(135deg, #245247 0%, #34705c 100%);
+  border: 1px solid rgba(203, 237, 99, 0.18);
+  box-shadow: 0 16px 32px rgba(36, 82, 71, 0.14);
   color: white;
   display: flex;
   align-items: center;
@@ -546,31 +564,32 @@ onMounted(() => {
 
 .motivation-label {
   margin: 0 0 10px;
-  color: #d7dfeb;
-  font-size: 0.7rem;
+  color: #cbed63;
+  font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
 .motivation-card h2 {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: 1.8rem;
 }
 
 .motivation-card > div > p:last-child {
   margin: 10px 0 0;
   max-width: 600px;
-  color: #c9d0dc;
-  font-size: 0.83rem;
-  line-height: 1.5;
+  color: #e2eee8;
+  font-size: 1.05rem;
+  line-height: 1.55;
 }
 
 .start-button {
   flex-shrink: 0;
-  padding: 12px 18px;
+  padding: 14px 22px;
   border-radius: 12px;
-  background: #e2f58b;
-  color: #172033;
+  background: #cbed63;
+  color: #17352c;
+  font-size: 1.05rem;
   text-decoration: none;
   font-weight: 800;
 }
@@ -608,13 +627,13 @@ onMounted(() => {
 }
 
 .summary-value {
-  font-size: 2.4rem;
+  font-size: 3rem;
   font-weight: 800;
   line-height: 1;
 }
 
 .summary-date {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 800;
   line-height: 1.2;
 }

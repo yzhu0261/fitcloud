@@ -4,8 +4,8 @@
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="brand-logo">F</div>
-          <span>FitCloud</span>
+          <div class="brand-logo">R</div>
+          <span>RepVelta</span>
         </div>
 
         <nav class="nav-menu">
@@ -24,13 +24,17 @@
           <RouterLink to="/progress" class="nav-item">
             Progress
           </RouterLink>
+
+          <RouterLink to="/account" class="nav-item">
+            My Account
+          </RouterLink>
         </nav>
       </div>
 
       <div class="sidebar-bottom">
         <div class="motivation-card">
           <p>Train. Track. Improve.</p>
-          <span>Build better habits with FitCloud.</span>
+          <span>Build better habits with RepVelta.</span>
         </div>
 
         <button class="logout-button" @click="handleLogout">
@@ -51,10 +55,10 @@
           </p>
         </div>
 
-        <div class="account-pill">
+        <RouterLink to="/account" class="account-pill">
           <span>My Account</span>
-          <small>FitCloud Member</small>
-        </div>
+          <small>RepVelta Member</small>
+        </RouterLink>
       </header>
 
       <!-- Display today's nutrition summary. -->
@@ -481,16 +485,19 @@ const deleteNutrition = async (nutritionId) => {
 .app-shell {
   min-height: 100vh;
   display: flex;
-  background: #f4f6f8;
+  background: #f1f5f2;
   color: #172033;
+  font-family: Inter, Arial, Helvetica, sans-serif;
 }
 
 /* Sidebar */
 .sidebar {
-  width: 230px;
+  width: 270px;
+  flex: 0 0 270px;
   min-height: 100vh;
   background: #fffefd;
-  padding: 28px 20px;
+  padding: 36px 28px;
+  border-right: 1px solid #dfe8e2;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -499,19 +506,20 @@ const deleteNutrition = async (nutritionId) => {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 1.2rem;
+  gap: 12px;
+  font-size: 1.5rem;
   font-weight: 800;
-  margin-bottom: 36px;
+  margin-bottom: 46px;
 }
 
 .brand-logo {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #e2f58b;
+  background: #cbed63;
+  color: #17352c;
   border-radius: 12px;
   font-weight: 800;
 }
@@ -519,24 +527,25 @@ const deleteNutrition = async (nutritionId) => {
 .nav-menu {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .nav-item {
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-radius: 12px;
   text-decoration: none;
-  color: #172033;
+  color: #52615d;
+  font-size: 1.06rem;
   font-weight: 500;
 }
 
 .nav-item:hover {
-  background: #f4f6f8;
+  background: #eef4ef;
 }
 
 .nav-item.router-link-exact-active {
-  background: #e4f58f;
-  color: #172033;
+  background: #dff09b;
+  color: #17352c;
   font-weight: 700;
 }
 
@@ -547,33 +556,41 @@ const deleteNutrition = async (nutritionId) => {
 }
 
 .motivation-card {
-  background: #d8ecf8;
-  padding: 18px;
+  background: #e5f0e8;
+  padding: 22px;
+  border: 1px solid #d4e4d9;
   border-radius: 16px;
 }
 
 .motivation-card p {
   margin: 0 0 6px;
   font-weight: 700;
+  font-size: 1.15rem;
 }
 
 .motivation-card span {
-  font-size: 0.85rem;
+  color: #536760;
+  font-size: 1rem;
+  line-height: 1.5;
 }
 
 .logout-button {
   border: none;
   background: transparent;
-  padding: 10px;
+  padding: 12px;
   cursor: pointer;
-  color: #172033;
+  color: #52615d;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 /* Main content */
 .main-content {
   flex: 1;
-  padding: 32px;
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 42px 50px 60px;
 }
 
 /* Page header */
@@ -581,17 +598,17 @@ const deleteNutrition = async (nutritionId) => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 28px;
+  margin-bottom: 34px;
 }
 
 .topbar h1 {
   margin: 4px 0 6px;
-  font-size: 2rem;
+  font-size: 2.6rem;
 }
 
 .eyebrow {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   color: #687083;
@@ -600,55 +617,70 @@ const deleteNutrition = async (nutritionId) => {
 .subtitle {
   margin: 0;
   color: #687083;
+  font-size: 1.1rem;
+  line-height: 1.55;
 }
 
 .account-pill {
   display: flex;
   flex-direction: column;
   background: #fffefd;
-  padding: 10px 16px;
+  padding: 12px 18px;
   border-radius: 14px;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+  border: 1px solid #e7e9ed;
+}
+
+.account-pill:hover {
+  border-color: #b8ca75;
+  transform: translateY(-1px);
 }
 
 .account-pill span {
   font-weight: 700;
+  font-size: 1rem;
 }
 
 .account-pill small {
   margin-top: 2px;
   color: #687083;
+  font-size: 0.88rem;
 }
 
 /* Nutrition summary */
 .nutrition-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
+  gap: 20px;
   margin-bottom: 24px;
 }
 
 .summary-card {
-  padding: 22px;
+  min-height: 180px;
+  padding: 26px;
   border-radius: 20px;
 }
 
 .summary-card p {
   margin: 0 0 16px;
   font-weight: 700;
+  font-size: 1.02rem;
 }
 
 .summary-card h2 {
   margin: 0;
-  font-size: 2.2rem;
+  font-size: 3rem;
 }
 
 .summary-card span {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: #596174;
 }
 
 .blue-card {
-  background: #d8ecf8;
+  background: #dcefea;
 }
 
 .yellow-card {
@@ -666,7 +698,8 @@ const deleteNutrition = async (nutritionId) => {
 /* Content cards */
 .content-card {
   background: #fffefd;
-  padding: 24px;
+  padding: 28px;
+  border: 1px solid #e7e9ec;
   border-radius: 20px;
   margin-bottom: 24px;
 }
@@ -680,6 +713,7 @@ const deleteNutrition = async (nutritionId) => {
 
 .section-heading h2 {
   margin: 4px 0 0;
+  font-size: 1.4rem;
 }
 
 /* Add Food form */
@@ -697,18 +731,21 @@ const deleteNutrition = async (nutritionId) => {
 }
 
 .form-group label {
-  font-size: 0.85rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
 .form-group input {
   width: 100%;
   box-sizing: border-box;
-  padding: 12px;
+  min-height: 52px;
+  padding: 13px 14px;
   border: 1px solid #dfe3e8;
   border-radius: 12px;
   outline: none;
   background: #ffffff;
+  color: #172033;
+  font-size: 1rem;
 }
 
 .form-group input:focus {
@@ -717,17 +754,20 @@ const deleteNutrition = async (nutritionId) => {
 
 .add-button {
   border: none;
-  background: #e2f58b;
-  padding: 12px 20px;
+  background: #cbed63;
+  color: #17352c;
+  min-height: 52px;
+  padding: 13px 20px;
   border-radius: 12px;
   font-weight: 700;
+  font-size: 1rem;
   cursor: pointer;
 }
 
 .form-error {
   margin: 14px 0 0;
   color: #b42318;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 /* Today's meals */
@@ -735,7 +775,7 @@ const deleteNutrition = async (nutritionId) => {
   background: #f4f6f8;
   padding: 7px 12px;
   border-radius: 999px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 700;
 }
 
@@ -749,11 +789,12 @@ const deleteNutrition = async (nutritionId) => {
 .empty-state p {
   margin: 0 0 5px;
   font-weight: 700;
+  font-size: 1.05rem;
 }
 
 .empty-state span {
   color: #687083;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .meal-list {
@@ -766,33 +807,62 @@ const deleteNutrition = async (nutritionId) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px;
+  padding: 20px;
   background: #f7f8f9;
   border-radius: 16px;
 }
 
 .meal-item h3 {
   margin: 0 0 5px;
+  font-size: 1.15rem;
 }
 
 .meal-calories {
   margin: 0 0 5px;
   font-weight: 700;
+  font-size: 1.02rem;
 }
 
 .meal-macros {
   margin: 0;
   color: #687083;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .remove-button {
   border: none;
   background: #ffffff;
-  padding: 9px 14px;
+  padding: 10px 15px;
   border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.save-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #cbed63;
+  color: #17352c;
+  font-size: 1.02rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.save-btn:disabled {
+  background: #e8ece9;
+  color: #919b97;
+  cursor: not-allowed;
+}
+
+.save-message {
+  margin: 14px 0 0;
+  color: #315e51;
+  font-size: 1rem;
+  font-weight: 650;
 }
 
 /* Nutrition history */
@@ -803,14 +873,14 @@ const deleteNutrition = async (nutritionId) => {
 }
 
 .history-item {
-  padding: 18px;
+  padding: 20px;
   background: #f7f8f9;
   border-radius: 16px;
 }
 
 .history-item h3 {
   margin: 0 0 12px;
-  font-size: 1rem;
+  font-size: 1.12rem;
 }
 
 .history-food {
@@ -820,7 +890,7 @@ const deleteNutrition = async (nutritionId) => {
   gap: 20px;
   padding: 8px 0;
   color: #687083;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .history-food + .history-food {
@@ -839,10 +909,11 @@ const deleteNutrition = async (nutritionId) => {
 .delete-history-button {
   border: none;
   background: #ffffff;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 0.95rem;
 }
 
 /* Responsive layout */
@@ -857,6 +928,31 @@ const deleteNutrition = async (nutritionId) => {
 
   .add-button {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    display: none;
+  }
+
+  .main-content {
+    padding: 32px 24px 48px;
+  }
+}
+
+@media (max-width: 600px) {
+  .nutrition-summary,
+  .food-form {
+    grid-template-columns: 1fr;
+  }
+
+  .account-pill {
+    display: none;
+  }
+
+  .main-content {
+    padding: 24px 16px 40px;
   }
 }
 </style>

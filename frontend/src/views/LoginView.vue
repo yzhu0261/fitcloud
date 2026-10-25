@@ -31,8 +31,6 @@ const handleLogin = async () => {
 
   if (!password.value) {
     passwordError.value = 'Password is required.'
-  } else if (password.value.length < 8) {
-    passwordError.value = 'Password must be at least 8 characters.'
   }
 
   if (emailError.value || passwordError.value) return
@@ -73,7 +71,7 @@ const handleLogin = async () => {
 <template>
   <AuthShell
     eyebrow="WELCOME BACK"
-    title="Sign in to FitCloud"
+    title="Sign in to RepVelta"
     description="Continue tracking the work you put in, one day at a time."
   >
     <div v-if="registrationComplete" class="alert alert-success" role="status">
@@ -133,7 +131,7 @@ const handleLogin = async () => {
     </form>
 
     <p class="auth-switch">
-      New to FitCloud?
+      New to RepVelta?
       <RouterLink to="/register">Create an account</RouterLink>
     </p>
   </AuthShell>
