@@ -141,6 +141,11 @@ onMounted(() => {
             Progress
           </RouterLink>
 
+          <RouterLink to="/coach" class="nav-item">
+            <span>✦</span>
+            AI Coach
+          </RouterLink>
+
           <RouterLink to="/account" class="nav-item">
             <span>●</span>
             My Account

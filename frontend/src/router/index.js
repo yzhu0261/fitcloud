@@ -8,6 +8,7 @@ import { getCurrentUser } from 'aws-amplify/auth'
 import WorkoutView from '../views/WorkoutView.vue'
 import ProgressView from '../views/ProgressView.vue'
 import AccountView from '../views/AccountView.vue'
+import CoachView from '../views/CoachView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -64,6 +65,14 @@ const router = createRouter({
       path: '/account',
       name: 'account',
       component: AccountView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/coach',
+      name: 'coach',
+      component: CoachView,
       meta: {
         requiresAuth: true,
       },

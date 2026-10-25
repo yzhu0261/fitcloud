@@ -25,6 +25,10 @@
             Progress
           </RouterLink>
 
+          <RouterLink to="/coach" class="nav-item">
+            AI Coach
+          </RouterLink>
+
           <RouterLink to="/account" class="nav-item">
             My Account
           </RouterLink>
