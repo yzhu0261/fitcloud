@@ -9,6 +9,7 @@ import WorkoutView from '../views/WorkoutView.vue'
 import ProgressView from '../views/ProgressView.vue'
 import AccountView from '../views/AccountView.vue'
 import CoachView from '../views/CoachView.vue'
+import PlanView from '../views/PlanView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -73,6 +74,14 @@ const router = createRouter({
       path: '/coach',
       name: 'coach',
       component: CoachView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/plan',
+      name: 'plan',
+      component: PlanView,
       meta: {
         requiresAuth: true,
       },

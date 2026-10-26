@@ -87,6 +87,7 @@ onMounted(async () => {
           <RouterLink to="/nutrition" class="nav-item"><span>◉</span> Nutrition</RouterLink>
           <RouterLink to="/progress" class="nav-item"><span>⌁</span> Progress</RouterLink>
           <RouterLink to="/coach" class="nav-item"><span>✦</span> AI Coach</RouterLink>
+          <RouterLink to="/plan" class="nav-item"><span>✓</span> My Plan</RouterLink>
           <RouterLink to="/account" class="nav-item"><span>●</span> My Account</RouterLink>
         </nav>
       </div>
@@ -158,7 +159,7 @@ onMounted(async () => {
           <div v-if="savedPlan" class="saved-plan-note">
             <strong>Saved weekly plan</strong>
             <p>{{ savedPlan.startDate }} – {{ savedPlan.endDate }}</p>
-            <RouterLink to="/dashboard">View today on Dashboard →</RouterLink>
+            <RouterLink to="/plan">Open full plan →</RouterLink>
           </div>
         </aside>
       </section>

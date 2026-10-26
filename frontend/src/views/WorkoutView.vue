@@ -151,6 +151,11 @@ onMounted(() => {
             AI Coach
           </RouterLink>
 
+          <RouterLink to="/plan" class="nav-item">
+            <span>✓</span>
+            My Plan
+          </RouterLink>
+
           <RouterLink to="/account" class="nav-item">
             <span>●</span>
             My Account
@@ -198,7 +203,7 @@ onMounted(() => {
           <h2>Today’s saved plan</h2>
           <div>{{ todayPlan.details }}</div>
         </div>
-        <RouterLink to="/coach">View full plan →</RouterLink>
+        <RouterLink to="/plan">View full plan →</RouterLink>
       </section>
 
       <!-- Summary Cards -->

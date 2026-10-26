@@ -174,6 +174,7 @@ onMounted(loadProgress)
           <RouterLink to="/nutrition" class="nav-item"><span>◉</span> Nutrition</RouterLink>
           <RouterLink to="/progress" class="nav-item"><span>⌁</span> Progress</RouterLink>
           <RouterLink to="/coach" class="nav-item"><span>✦</span> AI Coach</RouterLink>
+          <RouterLink to="/plan" class="nav-item"><span>✓</span> My Plan</RouterLink>
           <RouterLink to="/account" class="nav-item"><span>●</span> My Account</RouterLink>
         </nav>
       </div>

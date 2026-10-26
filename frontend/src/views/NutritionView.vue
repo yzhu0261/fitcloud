@@ -29,6 +29,10 @@
             AI Coach
           </RouterLink>
 
+          <RouterLink to="/plan" class="nav-item">
+            My Plan
+          </RouterLink>
+
           <RouterLink to="/account" class="nav-item">
             My Account
           </RouterLink>

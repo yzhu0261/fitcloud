@@ -135,6 +135,11 @@ onUnmounted(() => {
             AI Coach
           </RouterLink>
 
+          <RouterLink to="/plan" class="nav-item">
+            <span>✓</span>
+            My Plan
+          </RouterLink>
+
           <RouterLink to="/account" class="nav-item">
             <span>●</span>
             My Account
@@ -233,7 +238,7 @@ onUnmounted(() => {
           <button v-if="todayPlan" type="button" :disabled="isUpdatingPlan" class="plan-complete-action" @click="toggleTodayPlan">
             {{ todayPlan.completed ? 'Mark incomplete' : 'Mark complete' }}
           </button>
-          <RouterLink to="/coach" class="plan-secondary-action">View plan</RouterLink>
+          <RouterLink to="/plan" class="plan-secondary-action">View plan</RouterLink>
         </div>
       </section>
 
