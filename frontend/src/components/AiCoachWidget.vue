@@ -62,7 +62,7 @@ const sendMessage = async (suggestedMessage) => {
       <section v-if="isOpen" class="coach-panel" aria-label="RepVelta AI Coach">
         <header class="coach-header">
           <div class="coach-identity">
-            <span class="coach-avatar">R</span>
+            <span class="coach-avatar"><img src="/images/repvelta-coach-simple.png" alt="" /></span>
             <span><strong>RepVelta Coach</strong><small>AI fitness assistant</small></span>
           </div>
           <button type="button" class="close-button" aria-label="Close AI Coach" @click="isOpen = false">×</button>
@@ -70,11 +70,14 @@ const sendMessage = async (suggestedMessage) => {
 
         <div ref="messageList" class="widget-messages" aria-live="polite">
           <div v-for="(message, index) in messages" :key="index" :class="['widget-message', message.role]">
-            <span>{{ message.role === 'assistant' ? 'R' : 'You' }}</span>
+            <span>
+              <img v-if="message.role === 'assistant'" src="/images/repvelta-coach-simple.png" alt="" />
+              <template v-else>You</template>
+            </span>
             <p>{{ message.content }}</p>
           </div>
           <div v-if="isSending" class="widget-message assistant">
-            <span>R</span>
+            <span><img src="/images/repvelta-coach-simple.png" alt="" /></span>
             <p>Reviewing your data…</p>
           </div>
         </div>
@@ -97,7 +100,7 @@ const sendMessage = async (suggestedMessage) => {
     </Transition>
 
     <button v-if="!isOpen" type="button" class="coach-launcher" aria-label="Open RepVelta AI Coach" @click="openWidget">
-      <span>R</span>
+      <img class="launcher-mascot" src="/images/repvelta-coach-simple.png" alt="" />
       <span class="launcher-copy"><strong>AI Coach</strong><small>Ask me anything</small></span>
     </button>
   </div>
@@ -106,7 +109,8 @@ const sendMessage = async (suggestedMessage) => {
 <style scoped>
 .coach-widget { position: fixed; right: 26px; bottom: 24px; z-index: 1200; font-family: Inter, Arial, Helvetica, sans-serif; color: #172033; }
 .coach-launcher { display: flex; align-items: center; gap: 11px; min-width: 164px; padding: 11px 15px 11px 11px; border: 1px solid #b9d35d; border-radius: 999px; background: #173f34; color: #fff; box-shadow: 0 14px 38px rgba(28, 61, 51, .22); cursor: pointer; }
-.coach-launcher > span:first-child, .coach-avatar { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 50%; background: #cbed63; color: #17352c; font-weight: 900; }
+.launcher-mascot, .coach-avatar { width: 46px; height: 46px; flex: 0 0 46px; border-radius: 50%; background: #e9f5ba; object-fit: contain; }
+.coach-avatar { display: grid; place-items: center; overflow: hidden; }.coach-avatar img { width: 52px; height: 52px; object-fit: contain; }
 .launcher-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .launcher-copy strong { font-size: .98rem; }.launcher-copy small { color: #dce9e3; font-size: .78rem; }
 .coach-panel { width: min(390px, calc(100vw - 32px)); height: min(610px, calc(100vh - 48px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d7e2dc; border-radius: 22px; background: #fffefd; box-shadow: 0 22px 60px rgba(28, 61, 51, .24); }
@@ -117,6 +121,7 @@ const sendMessage = async (suggestedMessage) => {
 .widget-messages { flex: 1; min-height: 0; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
 .widget-message { display: flex; align-items: flex-start; gap: 9px; }.widget-message.user { flex-direction: row-reverse; }
 .widget-message > span { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 10px; background: #cbed63; color: #17352c; font-size: .72rem; font-weight: 850; }
+.widget-message > span img { width: 37px; height: 37px; object-fit: contain; }
 .widget-message.user > span { background: #dcefea; }
 .widget-message p { max-width: 80%; margin: 0; padding: 11px 13px; border-radius: 5px 14px 14px; background: #f0f5f1; font-size: .94rem; line-height: 1.5; white-space: pre-wrap; }
 .widget-message.user p { border-radius: 14px 5px 14px 14px; background: #e9f5ba; }

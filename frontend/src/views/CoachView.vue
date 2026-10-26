@@ -90,12 +90,15 @@ const sendMessage = async (suggestedMessage) => {
         <article class="chat-card">
           <div ref="messageList" class="message-list" aria-live="polite">
             <div v-for="(message, index) in messages" :key="index" :class="['message-row', message.role]">
-              <div class="message-avatar">{{ message.role === 'assistant' ? 'R' : 'You' }}</div>
+              <div class="message-avatar">
+                <img v-if="message.role === 'assistant'" src="/images/repvelta-coach-simple.png" alt="" />
+                <template v-else>You</template>
+              </div>
               <p>{{ message.content }}</p>
             </div>
 
             <div v-if="isSending" class="message-row assistant">
-              <div class="message-avatar">R</div>
+              <div class="message-avatar"><img src="/images/repvelta-coach-simple.png" alt="" /></div>
               <p class="typing">Reviewing your data<span>…</span></p>
             </div>
           </div>
@@ -161,6 +164,7 @@ const sendMessage = async (suggestedMessage) => {
 .message-row { display: flex; align-items: flex-start; gap: 12px; }
 .message-row.user { flex-direction: row-reverse; }
 .message-avatar { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 13px; background: #cbed63; color: #17352c; font-size: .85rem; font-weight: 850; }
+.message-avatar img { width: 48px; height: 48px; object-fit: contain; }
 .message-row.user .message-avatar { background: #dcefea; }
 .message-row p { max-width: 76%; margin: 0; padding: 14px 16px; border-radius: 6px 16px 16px; background: #f0f5f1; font-size: 1rem; line-height: 1.6; white-space: pre-wrap; }
 .message-row.user p { border-radius: 16px 6px 16px 16px; background: #e9f5ba; }
