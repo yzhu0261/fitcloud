@@ -5,6 +5,7 @@ import { z } from 'zod'
 const secretsClient = new SecretsManagerClient({})
 const fitnessApiBaseUrl = process.env.FITNESS_API_BASE_URL
 const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
+const appTimeZone = process.env.APP_TIME_ZONE || 'Australia/Sydney'
 
 let apiKeyReady = false
 
@@ -79,6 +80,18 @@ const sortNewestFirst = (records) =>
     String(b.date || '').localeCompare(String(a.date || '')),
   )
 
+const getCalendarDate = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: appTimeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
+
+  return `${values.year}-${values.month}-${values.day}`
+}
+
 const createCoachAgent = (authorization) => {
   const getRecentWorkouts = tool({
     name: 'get_recent_workouts',
@@ -113,14 +126,20 @@ const createCoachAgent = (authorization) => {
         fetchFitnessData('/nutrition', authorization),
       ])
 
-      const today = new Date()
-      const cutoff = new Date(today)
+      const endDateText = getCalendarDate()
+      const endDate = new Date(`${endDateText}T00:00:00Z`)
+      const cutoff = new Date(endDate)
       cutoff.setUTCDate(cutoff.getUTCDate() - 6)
-      cutoff.setUTCHours(0, 0, 0, 0)
+
+      const formatUtcDate = (date) => date.toISOString().slice(0, 10)
 
       const isWithinSevenDays = (date) => {
         const parsedDate = new Date(`${date}T00:00:00Z`)
-        return !Number.isNaN(parsedDate.getTime()) && parsedDate >= cutoff
+        return (
+          !Number.isNaN(parsedDate.getTime()) &&
+          parsedDate >= cutoff &&
+          parsedDate <= endDate
+        )
       }
 
       const recentWorkouts = workouts.filter((item) => isWithinSevenDays(item.date))
@@ -160,7 +179,11 @@ const createCoachAgent = (authorization) => {
       )
 
       return JSON.stringify({
-        period: 'Last 7 days including today',
+        period: {
+          label: 'Last 7 days including today',
+          startDate: formatUtcDate(cutoff),
+          endDate: endDateText,
+        },
         training: workoutSummary,
         nutrition: nutritionSummary,
       })
@@ -174,6 +197,9 @@ const createCoachAgent = (authorization) => {
 You are RepVelta's supportive fitness and nutrition coach.
 Use the available tools whenever the user asks about their saved activity.
 Base personalised observations only on tool results; never invent records.
+Read record dates and summary date ranges literally. An older saved record is not
+evidence that a seven-day summary is incomplete, and it does not conflict with a
+zero count for a later seven-day period.
 Be concise, practical, encouraging, and clear about uncertainty.
 Do not diagnose medical conditions or replace a doctor, physiotherapist, or dietitian.
 If the user describes pain, injury, disordered eating, or an emergency, recommend qualified professional help.
