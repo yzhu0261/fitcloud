@@ -134,31 +134,31 @@ const sendMessage = async (suggestedMessage) => {
 .coach-avatar { display: grid; place-items: center; overflow: hidden; }.coach-avatar img { width: 52px; height: 52px; object-fit: contain; }
 .launcher-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .launcher-copy strong { font-size: .98rem; }.launcher-copy small { color: #dce9e3; font-size: .78rem; }
-.coach-panel { width: min(390px, calc(100vw - 32px)); height: min(610px, calc(100vh - 48px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d7e2dc; border-radius: 22px; background: #fffefd; box-shadow: 0 22px 60px rgba(28, 61, 51, .24); }
-.coach-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; border-bottom: 1px solid #e6ece8; background: #173f34; color: #fff; }
+.coach-panel { width: min(470px, calc(100vw - 40px)); height: min(680px, calc(100vh - 40px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #d7e2dc; border-radius: 24px; background: #fffefd; box-shadow: 0 22px 60px rgba(28, 61, 51, .24); }
+.coach-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid #e6ece8; background: #173f34; color: #fff; }
 .coach-identity { display: flex; align-items: center; gap: 11px; }.coach-identity > span:last-child { display: flex; flex-direction: column; gap: 2px; }
-.coach-identity strong { font-size: 1rem; }.coach-identity small { color: #dce9e3; font-size: .8rem; }
+.coach-identity strong { font-size: 1.08rem; }.coach-identity small { color: #dce9e3; font-size: .9rem; }
 .close-button { width: 38px; height: 38px; border: 0; border-radius: 50%; background: rgba(255,255,255,.1); color: #fff; font-size: 1.6rem; line-height: 1; cursor: pointer; }
-.widget-messages { flex: 1; min-height: 0; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.widget-messages { flex: 1; min-height: 0; padding: 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .widget-message { display: flex; align-items: flex-start; gap: 9px; }.widget-message.user { flex-direction: row-reverse; }
 .widget-message > span { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 10px; background: #cbed63; color: #17352c; font-size: .72rem; font-weight: 850; }
 .widget-message > span img { width: 37px; height: 37px; object-fit: contain; }
 .widget-message.user > span { background: #dcefea; }
 .widget-message-copy { max-width: 80%; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
 .widget-message.user .widget-message-copy { align-items: flex-end; }
-.widget-message p { max-width: none; margin: 0; padding: 11px 13px; border-radius: 5px 14px 14px; background: #f0f5f1; font-size: .94rem; line-height: 1.5; white-space: pre-wrap; }
+.widget-message p { max-width: none; margin: 0; padding: 13px 15px; border-radius: 5px 14px 14px; background: #f0f5f1; font-size: 1rem; line-height: 1.55; white-space: pre-wrap; }
 .widget-message.user p { border-radius: 14px 5px 14px 14px; background: #e9f5ba; }
 .widget-save-plan { padding: 8px 11px; border: 0; border-radius: 9px; background: #cbed63; color: #17352c; font-size: .8rem; font-weight: 800; cursor: pointer; }
-.quick-prompts { padding: 0 16px 12px; display: flex; gap: 7px; overflow-x: auto; }
-.quick-prompts button { flex: 0 0 auto; padding: 8px 10px; border: 1px solid #d6e2da; border-radius: 999px; background: #fff; color: #315e51; font-size: .78rem; font-weight: 700; cursor: pointer; }
+.quick-prompts { padding: 0 20px 14px; display: flex; gap: 8px; overflow-x: auto; }
+.quick-prompts button { flex: 0 0 auto; padding: 9px 12px; border: 1px solid #d6e2da; border-radius: 999px; background: #fff; color: #315e51; font-size: .86rem; font-weight: 700; cursor: pointer; }
 .widget-error { margin: 0 16px 10px; padding: 10px 12px; border-radius: 10px; background: #fff2f0; color: #a52b20; font-size: .85rem; }
 .widget-notice { margin: 0 16px 10px; padding: 10px 12px; border-radius: 10px; background: #edf7d0; color: #315e51; font-size: .84rem; font-weight: 700; }
-.widget-composer { padding: 12px 16px 10px; border-top: 1px solid #e7ece9; display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: end; }
-.widget-composer textarea { min-height: 50px; max-height: 110px; resize: vertical; padding: 11px 12px; border: 1px solid #d9e1dc; border-radius: 12px; outline: none; color: inherit; font: inherit; font-size: .92rem; line-height: 1.4; }
+.widget-composer { padding: 14px 20px 12px; border-top: 1px solid #e7ece9; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+.widget-composer textarea { min-height: 62px; max-height: 140px; resize: vertical; padding: 13px 14px; border: 1px solid #d9e1dc; border-radius: 12px; outline: none; color: inherit; font: inherit; font-size: 1rem; line-height: 1.45; }
 .widget-composer textarea:focus { border-color: #91ae3e; box-shadow: 0 0 0 3px rgba(203,237,99,.22); }
-.widget-composer button { min-height: 50px; padding: 0 16px; border: 0; border-radius: 12px; background: #cbed63; color: #17352c; font-weight: 850; cursor: pointer; }
+.widget-composer button { min-height: 62px; padding: 0 20px; border: 0; border-radius: 12px; background: #cbed63; color: #17352c; font-size: .95rem; font-weight: 850; cursor: pointer; }
 .widget-composer button:disabled { opacity: .55; cursor: not-allowed; }
-.full-coach-link { display: block; padding: 3px 18px 16px; color: #315e51; font-size: .88rem; font-weight: 800; text-align: right; text-decoration: none; }
+.full-coach-link { display: block; padding: 4px 22px 18px; color: #315e51; font-size: .95rem; font-weight: 800; text-align: right; text-decoration: none; }
 .coach-panel-enter-active, .coach-panel-leave-active { transition: opacity .18s ease, transform .18s ease; }.coach-panel-enter-from, .coach-panel-leave-to { opacity: 0; transform: translateY(12px) scale(.98); }
-@media (max-width: 600px) { .coach-widget { right: 16px; bottom: 16px; }.coach-launcher { min-width: auto; padding-right: 11px; }.launcher-copy { display: none; }.coach-panel { width: calc(100vw - 32px); height: min(620px, calc(100vh - 32px)); } }
+@media (max-width: 600px) { .coach-widget { right: 16px; bottom: 16px; }.coach-launcher { min-width: auto; padding-right: 11px; }.launcher-copy { display: none; }.coach-panel { width: calc(100vw - 32px); height: min(650px, calc(100vh - 32px)); }.widget-messages { padding: 18px; } }
 </style>

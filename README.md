@@ -46,4 +46,35 @@ Create a Node.js Lambda function and upload `dist/repvelta-ai-coach.zip` with th
 
 The Lambda execution role needs `secretsmanager:GetSecretValue` permission for only the configured OpenAI secret. The API Gateway route must use the existing Cognito JWT authorizer so the Lambda can safely forward the authenticated user's token to the workout and nutrition APIs.
 
+## Cloud weekly plans
+
+The `backend/plans` Lambda stores AI-generated weekly plans for each authenticated user. Create a DynamoDB table named `RepVeltaPlans` with:
+
+- Partition key: `userId` (String)
+- Sort key: `planId` (String)
+- Billing mode: on-demand
+
+Build the deployment package:
+
+```powershell
+cd backend/plans
+npm install
+npm run build
+Compress-Archive -LiteralPath dist/index.cjs -DestinationPath dist/repvelta-plans.zip -Force
+```
+
+Create a Node.js 20 or later Lambda with handler `index.handler`, then configure:
+
+- Environment variable `PLANS_TABLE_NAME=RepVeltaPlans`
+- Environment variable `ALLOWED_ORIGIN` with the frontend origin
+- DynamoDB permissions for `Query`, `PutItem`, `UpdateItem`, and `DeleteItem` on only the `RepVeltaPlans` table
+
+Add a Cognito-protected API Gateway `ANY /plans` route using this Lambda integration. The Lambda accepts `GET`, `POST`, `PATCH`, and `DELETE`; include those methods in the API's CORS configuration. Set the resulting endpoint in `frontend/.env`:
+
+```text
+VITE_PLANS_API_URL=https://your-api-id.execute-api.ap-southeast-2.amazonaws.com/plans
+```
+
+Until that variable is configured, the frontend continues using per-user browser storage so local development remains functional.
+
 ![RepVelta AWS Architecture](docs/architecture/fitcloud-aws-architecture.png)

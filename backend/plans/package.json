@@ -1,0 +1,16 @@
+{
+  "name": "repvelta-plans",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/index.js --bundle --platform=node --target=node20 --format=cjs --outfile=dist/index.cjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.922.0",
+    "@aws-sdk/lib-dynamodb": "^3.922.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.11"
+  }
+}

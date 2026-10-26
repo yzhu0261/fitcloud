@@ -5,6 +5,7 @@ import { signOut, fetchAuthSession } from 'aws-amplify/auth'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
+  updateWeeklyPlanDay,
   weeklyPlanUpdatedEvent,
 } from '../services/weeklyPlan'
 
@@ -14,6 +15,8 @@ const router = useRouter()
 const workouts = ref([])
 const weeklyPlan = ref(null)
 const todayPlan = computed(() => getTodayPlanDay(weeklyPlan.value))
+const isUpdatingPlan = ref(false)
+const planActionError = ref('')
 
 // Sign the current user out and return to the login page.
 const handleLogout = async () => {
@@ -64,6 +67,25 @@ const latestWorkout = computed(() => {
 // Load workout data when the Dashboard page opens.
 const refreshWeeklyPlan = async (event) => {
   weeklyPlan.value = event?.detail || (await loadWeeklyPlan())
+}
+
+const toggleTodayPlan = async () => {
+  if (!todayPlan.value || isUpdatingPlan.value) return
+
+  planActionError.value = ''
+  isUpdatingPlan.value = true
+
+  try {
+    weeklyPlan.value = await updateWeeklyPlanDay(
+      weeklyPlan.value,
+      todayPlan.value.dayNumber,
+      !todayPlan.value.completed,
+    )
+  } catch (error) {
+    planActionError.value = error.message || 'The plan could not be updated.'
+  } finally {
+    isUpdatingPlan.value = false
+  }
 }
 
 onMounted(() => {
@@ -201,12 +223,16 @@ onUnmounted(() => {
         <div class="ai-plan-icon">✦</div>
         <div class="ai-plan-copy">
           <p class="ai-plan-label">TODAY’S AI PLAN</p>
-          <h2>{{ todayPlan ? `Day ${todayPlan.dayNumber}` : 'Weekly plan saved' }}</h2>
+          <h2>{{ todayPlan ? `Day ${todayPlan.dayNumber}${todayPlan.completed ? ' · Completed' : ''}` : 'Weekly plan saved' }}</h2>
           <p v-if="todayPlan">{{ todayPlan.details }}</p>
           <p v-else>Your saved plan covers {{ weeklyPlan.startDate }} to {{ weeklyPlan.endDate }}. Ask your coach to create a new plan when you are ready.</p>
+          <p v-if="planActionError" class="plan-action-error">{{ planActionError }}</p>
         </div>
         <div class="ai-plan-actions">
           <RouterLink v-if="todayPlan" to="/workout?fromPlan=1" class="plan-primary-action">Start workout</RouterLink>
+          <button v-if="todayPlan" type="button" :disabled="isUpdatingPlan" class="plan-complete-action" @click="toggleTodayPlan">
+            {{ todayPlan.completed ? 'Mark incomplete' : 'Mark complete' }}
+          </button>
           <RouterLink to="/coach" class="plan-secondary-action">View plan</RouterLink>
         </div>
       </section>
@@ -531,9 +557,12 @@ onUnmounted(() => {
 .ai-plan-copy h2 { margin: 0; font-size: 1.4rem; }
 .ai-plan-copy > p:last-child { margin: 7px 0 0; color: #52615d; font-size: 1rem; line-height: 1.55; }
 .ai-plan-actions { display: flex; gap: 9px; }
-.ai-plan-actions a { padding: 12px 16px; border-radius: 11px; font-size: .95rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.ai-plan-actions a, .ai-plan-actions button { padding: 12px 16px; border-radius: 11px; font: inherit; font-size: .95rem; font-weight: 800; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .plan-primary-action { background: #173f34; color: #fff; }
 .plan-secondary-action { border: 1px solid #bfd0c5; background: #fffefd; color: #315e51; }
+.plan-complete-action { border: 1px solid #9ebc49; background: #cbed63; color: #17352c; }
+.plan-complete-action:disabled { opacity: .6; cursor: wait; }
+.ai-plan-copy .plan-action-error { color: #a52b20; font-weight: 700; }
 
 /* Features */
 
