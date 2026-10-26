@@ -1,9 +1,8 @@
 <script setup>
 import { nextTick, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
+import { requestCoachReply } from '../services/aiCoach'
 
-const apiUrl = import.meta.env.VITE_AI_COACH_API_URL
 const messageInput = ref('')
 const isSending = ref(false)
 const chatError = ref('')
@@ -24,36 +23,6 @@ const suggestions = [
   'Review my recent nutrition records.',
 ]
 
-const getCoachPreferences = async () => {
-  const user = await getCurrentUser()
-  const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
-
-  if (!savedProfile) {
-    return {
-      profileConfigured: false,
-      weeklyWorkoutGoal: 3,
-      dailyCalorieGoal: 2000,
-    }
-  }
-
-  try {
-    const profile = JSON.parse(savedProfile)
-
-    return {
-      profileConfigured: true,
-      displayName: String(profile.displayName || '').trim().slice(0, 40),
-      weeklyWorkoutGoal: Number(profile.weeklyWorkoutGoal) || 3,
-      dailyCalorieGoal: Number(profile.dailyCalorieGoal) || 2000,
-    }
-  } catch {
-    return {
-      profileConfigured: false,
-      weeklyWorkoutGoal: 3,
-      dailyCalorieGoal: 2000,
-    }
-  }
-}
-
 const scrollToLatest = async () => {
   await nextTick()
   messageList.value?.scrollTo({
@@ -73,39 +42,9 @@ const sendMessage = async (suggestedMessage) => {
   isSending.value = true
   await scrollToLatest()
 
-  if (!apiUrl) {
-    chatError.value =
-      'AI Coach is not connected yet. Add VITE_AI_COACH_API_URL to the frontend environment after the Lambda API is deployed.'
-    isSending.value = false
-    return
-  }
-
   try {
-    const session = await fetchAuthSession()
-    const idToken = session.tokens?.idToken?.toString()
-
-    if (!idToken) {
-      throw new Error('Your session has expired. Please sign in again.')
-    }
-
-    const preferences = await getCoachPreferences()
-
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ message, preferences }),
-    })
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(result.message || 'The AI Coach could not respond.')
-    }
-
-    messages.value.push({ role: 'assistant', content: result.reply })
+    const reply = await requestCoachReply(message)
+    messages.value.push({ role: 'assistant', content: reply })
   } catch (error) {
     chatError.value = error.message || 'The AI Coach could not respond.'
   } finally {
