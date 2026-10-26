@@ -1,7 +1,7 @@
 <script setup>
 import { nextTick, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { fetchAuthSession } from 'aws-amplify/auth'
+import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
 
 const apiUrl = import.meta.env.VITE_AI_COACH_API_URL
 const messageInput = ref('')
@@ -13,15 +13,46 @@ const messages = ref([
   {
     role: 'assistant',
     content:
-      'Hi, I’m your RepVelta AI Coach. Ask me about your recent workouts, nutrition, or seven-day progress.',
+      'Hi, I’m your RepVelta AI Coach. Ask me about your recent activity or let me create a goal-aware weekly plan.',
   },
 ])
 
 const suggestions = [
+  'Create my weekly plan.',
   'Summarise my last 7 days.',
   'How has my training been recently?',
   'Review my recent nutrition records.',
 ]
+
+const getCoachPreferences = async () => {
+  const user = await getCurrentUser()
+  const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
+
+  if (!savedProfile) {
+    return {
+      profileConfigured: false,
+      weeklyWorkoutGoal: 3,
+      dailyCalorieGoal: 2000,
+    }
+  }
+
+  try {
+    const profile = JSON.parse(savedProfile)
+
+    return {
+      profileConfigured: true,
+      displayName: String(profile.displayName || '').trim().slice(0, 40),
+      weeklyWorkoutGoal: Number(profile.weeklyWorkoutGoal) || 3,
+      dailyCalorieGoal: Number(profile.dailyCalorieGoal) || 2000,
+    }
+  } catch {
+    return {
+      profileConfigured: false,
+      weeklyWorkoutGoal: 3,
+      dailyCalorieGoal: 2000,
+    }
+  }
+}
 
 const scrollToLatest = async () => {
   await nextTick()
@@ -57,13 +88,15 @@ const sendMessage = async (suggestedMessage) => {
       throw new Error('Your session has expired. Please sign in again.')
     }
 
+    const preferences = await getCoachPreferences()
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${idToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, preferences }),
     })
 
     const result = await response.json()
@@ -100,7 +133,7 @@ const sendMessage = async (suggestedMessage) => {
       <div class="sidebar-card">
         <div class="sidebar-card-icon">✦</div>
         <h3>Ask.<br />Learn.<br />Improve.</h3>
-        <p>Your coach can review saved activity but cannot change your records.</p>
+        <p>Your coach can review saved activity and create plans, but cannot change your records.</p>
       </div>
     </aside>
 
@@ -109,7 +142,7 @@ const sendMessage = async (suggestedMessage) => {
         <div>
           <p class="eyebrow">REPVELTA INTELLIGENCE</p>
           <h1>AI Fitness Coach</h1>
-          <p>Get personalised observations from your saved training and nutrition data.</p>
+          <p>Get personalised observations and weekly plans from your goals and saved activity.</p>
         </div>
         <RouterLink to="/account" class="profile"><span class="profile-avatar">A</span><span><strong>My Account</strong><small>RepVelta Member</small></span></RouterLink>
       </header>
@@ -137,7 +170,7 @@ const sendMessage = async (suggestedMessage) => {
           <p v-if="chatError" class="chat-error">{{ chatError }}</p>
 
           <form class="composer" @submit.prevent="sendMessage()">
-            <textarea v-model="messageInput" maxlength="2000" rows="2" placeholder="Ask about your workouts or nutrition…" @keydown.enter.exact.prevent="sendMessage()"></textarea>
+            <textarea v-model="messageInput" maxlength="2000" rows="2" placeholder="Ask about your workouts, nutrition, or weekly plan…" @keydown.enter.exact.prevent="sendMessage()"></textarea>
             <button type="submit" :disabled="isSending || !messageInput.trim()">Send</button>
           </form>
         </article>
@@ -149,6 +182,7 @@ const sendMessage = async (suggestedMessage) => {
             <li><span>01</span> Review recent workouts</li>
             <li><span>02</span> Review nutrition records</li>
             <li><span>03</span> Calculate seven-day progress</li>
+            <li><span>04</span> Create a goal-aware weekly plan</li>
           </ul>
           <div class="safety-note"><strong>Health note</strong><p>AI guidance is educational and does not replace medical or professional advice.</p></div>
         </aside>

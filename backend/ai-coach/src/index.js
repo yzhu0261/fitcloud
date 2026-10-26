@@ -92,7 +92,41 @@ const getCalendarDate = (date = new Date()) => {
   return `${values.year}-${values.month}-${values.day}`
 }
 
-const createCoachAgent = (authorization) => {
+const normalizePreferences = (preferences = {}) => {
+  const safePreferences =
+    preferences && typeof preferences === 'object' ? preferences : {}
+  const weeklyWorkoutGoal = Number(safePreferences.weeklyWorkoutGoal)
+  const dailyCalorieGoal = Number(safePreferences.dailyCalorieGoal)
+
+  return {
+    profileConfigured: safePreferences.profileConfigured === true,
+    displayName: String(safePreferences.displayName || '').trim().slice(0, 40),
+    weeklyWorkoutGoal:
+      Number.isInteger(weeklyWorkoutGoal) &&
+      weeklyWorkoutGoal >= 1 &&
+      weeklyWorkoutGoal <= 14
+        ? weeklyWorkoutGoal
+        : 3,
+    dailyCalorieGoal:
+      Number.isFinite(dailyCalorieGoal) &&
+      dailyCalorieGoal >= 500 &&
+      dailyCalorieGoal <= 10000
+        ? Math.round(dailyCalorieGoal)
+        : 2000,
+  }
+}
+
+const createCoachAgent = (authorization, preferences) => {
+  const getUserGoals = tool({
+    name: 'get_user_goals',
+    description:
+      'Return the authenticated user’s saved weekly workout and daily calorie goals for personalised planning.',
+    parameters: z.object({}),
+    async execute() {
+      return JSON.stringify(preferences)
+    },
+  })
+
   const getRecentWorkouts = tool({
     name: 'get_recent_workouts',
     description:
@@ -197,6 +231,16 @@ const createCoachAgent = (authorization) => {
 You are RepVelta's supportive fitness and nutrition coach.
 Use the available tools whenever the user asks about their saved activity.
 Base personalised observations only on tool results; never invent records.
+When the user asks for a weekly plan, use get_user_goals, get_recent_workouts,
+get_recent_nutrition, and calculate_weekly_progress before answering. Create a
+clear seven-day plan that matches the weekly workout goal, includes recovery,
+and treats the calorie goal as a user-supplied tracking target rather than a
+medical prescription. If recent data is sparse, say so and keep the plan
+conservative. If profileConfigured is false, explain that default goals were
+used and suggest setting goals in My Account. Format weekly plans as concise
+plain text with a short summary followed by Day 1 through Day 7 on separate
+lines. Do not use Markdown headings, tables, bold markers, or code fences. Do
+not claim the plan has been saved.
 Read record dates and summary date ranges literally. An older saved record is not
 evidence that a seven-day summary is incomplete, and it does not conflict with a
 zero count for a later seven-day period.
@@ -205,7 +249,12 @@ Do not diagnose medical conditions or replace a doctor, physiotherapist, or diet
 If the user describes pain, injury, disordered eating, or an emergency, recommend qualified professional help.
 This first version is read-only. Never claim that you changed, created, or deleted user data.
     `.trim(),
-    tools: [getRecentWorkouts, getRecentNutrition, calculateWeeklyProgress],
+    tools: [
+      getUserGoals,
+      getRecentWorkouts,
+      getRecentNutrition,
+      calculateWeeklyProgress,
+    ],
   })
 }
 
@@ -238,9 +287,11 @@ export const handler = async (event) => {
     return response(400, { message: 'Messages must be 2,000 characters or fewer.' })
   }
 
+  const preferences = normalizePreferences(body.preferences)
+
   try {
     await ensureOpenAiApiKey()
-    const agent = createCoachAgent(authorization)
+    const agent = createCoachAgent(authorization, preferences)
     const result = await run(agent, message)
 
     return response(200, {
