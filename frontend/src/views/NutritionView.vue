@@ -443,8 +443,8 @@ const saveNutrition = async () => {
     }
   )
 
-  // Convert the API response from JSON into a JavaScript object.
-  const result = await response.json()
+  // Consume the API response before refreshing the saved history.
+  await response.json()
 
   // Clear today's meal list and show a message after a successful save.
   if (response.ok) {
@@ -579,13 +579,15 @@ const deleteNutrition = async (nutritionId) => {
 }
 
 .logout-button {
+  width: 100%;
+  min-height: 48px;
   border: none;
   background: transparent;
-  padding: 12px;
+  padding: 13px 16px;
   cursor: pointer;
   color: #52615d;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.12rem;
+  font-weight: 700;
 }
 
 /* Main content */

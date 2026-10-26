@@ -2,12 +2,14 @@
 import { nextTick, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { requestCoachReply } from '../services/aiCoach'
+import { parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
 
 const isOpen = ref(false)
 const isSending = ref(false)
 const messageInput = ref('')
 const chatError = ref('')
 const messageList = ref(null)
+const planNotice = ref('')
 const messages = ref([
   {
     role: 'assistant',
@@ -33,6 +35,17 @@ const openWidget = () => {
   nextTick(() => document.querySelector('.coach-widget textarea')?.focus())
 }
 
+const handleSavePlan = async (content) => {
+  planNotice.value = ''
+
+  try {
+    await saveWeeklyPlan(content)
+    planNotice.value = 'Plan saved. View today’s session on your Dashboard.'
+  } catch (error) {
+    chatError.value = error.message || 'The weekly plan could not be saved.'
+  }
+}
+
 const sendMessage = async (suggestedMessage) => {
   const message = String(suggestedMessage || messageInput.value).trim()
 
@@ -46,7 +59,11 @@ const sendMessage = async (suggestedMessage) => {
 
   try {
     const reply = await requestCoachReply(message)
-    messages.value.push({ role: 'assistant', content: reply })
+    messages.value.push({
+      role: 'assistant',
+      content: reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+    })
   } catch (error) {
     chatError.value = error.message || 'The AI Coach could not respond.'
   } finally {
@@ -74,7 +91,10 @@ const sendMessage = async (suggestedMessage) => {
               <img v-if="message.role === 'assistant'" src="/images/repvelta-coach-simple.png" alt="" />
               <template v-else>You</template>
             </span>
-            <p>{{ message.content }}</p>
+            <div class="widget-message-copy">
+              <p>{{ message.content }}</p>
+              <button v-if="message.isWeeklyPlan" type="button" class="widget-save-plan" @click="handleSavePlan(message.content)">Save plan</button>
+            </div>
           </div>
           <div v-if="isSending" class="widget-message assistant">
             <span><img src="/images/repvelta-coach-simple.png" alt="" /></span>
@@ -89,6 +109,7 @@ const sendMessage = async (suggestedMessage) => {
         </div>
 
         <p v-if="chatError" class="widget-error">{{ chatError }}</p>
+        <p v-if="planNotice" class="widget-notice">{{ planNotice }}</p>
 
         <form class="widget-composer" @submit.prevent="sendMessage()">
           <textarea v-model="messageInput" rows="2" maxlength="2000" placeholder="Ask your coach…" @keydown.enter.exact.prevent="sendMessage()"></textarea>
@@ -123,11 +144,15 @@ const sendMessage = async (suggestedMessage) => {
 .widget-message > span { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 10px; background: #cbed63; color: #17352c; font-size: .72rem; font-weight: 850; }
 .widget-message > span img { width: 37px; height: 37px; object-fit: contain; }
 .widget-message.user > span { background: #dcefea; }
-.widget-message p { max-width: 80%; margin: 0; padding: 11px 13px; border-radius: 5px 14px 14px; background: #f0f5f1; font-size: .94rem; line-height: 1.5; white-space: pre-wrap; }
+.widget-message-copy { max-width: 80%; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.widget-message.user .widget-message-copy { align-items: flex-end; }
+.widget-message p { max-width: none; margin: 0; padding: 11px 13px; border-radius: 5px 14px 14px; background: #f0f5f1; font-size: .94rem; line-height: 1.5; white-space: pre-wrap; }
 .widget-message.user p { border-radius: 14px 5px 14px 14px; background: #e9f5ba; }
+.widget-save-plan { padding: 8px 11px; border: 0; border-radius: 9px; background: #cbed63; color: #17352c; font-size: .8rem; font-weight: 800; cursor: pointer; }
 .quick-prompts { padding: 0 16px 12px; display: flex; gap: 7px; overflow-x: auto; }
 .quick-prompts button { flex: 0 0 auto; padding: 8px 10px; border: 1px solid #d6e2da; border-radius: 999px; background: #fff; color: #315e51; font-size: .78rem; font-weight: 700; cursor: pointer; }
 .widget-error { margin: 0 16px 10px; padding: 10px 12px; border-radius: 10px; background: #fff2f0; color: #a52b20; font-size: .85rem; }
+.widget-notice { margin: 0 16px 10px; padding: 10px 12px; border-radius: 10px; background: #edf7d0; color: #315e51; font-size: .84rem; font-weight: 700; }
 .widget-composer { padding: 12px 16px 10px; border-top: 1px solid #e7ece9; display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: end; }
 .widget-composer textarea { min-height: 50px; max-height: 110px; resize: vertical; padding: 11px 12px; border: 1px solid #d9e1dc; border-radius: 12px; outline: none; color: inherit; font: inherit; font-size: .92rem; line-height: 1.4; }
 .widget-composer textarea:focus { border-color: #91ae3e; box-shadow: 0 0 0 3px rgba(203,237,99,.22); }

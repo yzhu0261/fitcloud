@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { RouterLink } from 'vue-router'
+import { getTodayPlanDay, loadWeeklyPlan } from '../services/weeklyPlan'
 
 const muscleGroup = ref('')
 const exercise = ref('')
@@ -12,6 +13,7 @@ const weight = ref('')
 const exercises = ref([])
 const workouts = ref([])
 const formError = ref('')
+const todayPlan = ref(null)
 
 const addExercise = () => {
   formError.value = ''
@@ -106,6 +108,9 @@ const loadWorkouts = async () => {
 
 onMounted(() => {
   loadWorkouts()
+  loadWeeklyPlan().then((plan) => {
+    todayPlan.value = getTodayPlanDay(plan)
+  })
 })
 
 </script>
@@ -185,6 +190,16 @@ onMounted(() => {
           </div>
         </RouterLink>
       </header>
+
+      <section v-if="todayPlan" class="coach-plan-banner">
+        <div class="coach-plan-mark">✦</div>
+        <div>
+          <p>REPVELTA COACH · DAY {{ todayPlan.dayNumber }}</p>
+          <h2>Today’s saved plan</h2>
+          <div>{{ todayPlan.details }}</div>
+        </div>
+        <RouterLink to="/coach">View full plan →</RouterLink>
+      </section>
 
       <!-- Summary Cards -->
       <section class="summary-grid">
@@ -606,6 +621,13 @@ onMounted(() => {
   color: #8b93a0;
 }
 
+.coach-plan-banner { margin-bottom: 24px; padding: 22px 24px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 17px; border: 1px solid #cdddb2; border-radius: 18px; background: linear-gradient(135deg, #eef6dc 0%, #e4f0e9 100%); }
+.coach-plan-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: #cbed63; color: #17352c; font-size: 1.25rem; font-weight: 900; }
+.coach-plan-banner p { margin: 0 0 5px; color: #527064; font-size: .82rem; font-weight: 850; letter-spacing: .08em; }
+.coach-plan-banner h2 { margin: 0 0 7px; font-size: 1.35rem; }
+.coach-plan-banner div > div { color: #52615d; font-size: 1rem; line-height: 1.55; }
+.coach-plan-banner a { padding: 11px 14px; border: 1px solid #bfd0c5; border-radius: 11px; background: #fffefd; color: #315e51; font-size: .95rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+
 /* Summary */
 
 .summary-grid {
@@ -970,5 +992,8 @@ onMounted(() => {
   .metrics-grid {
     grid-template-columns: 1fr;
   }
+
+  .coach-plan-banner { grid-template-columns: auto 1fr; }
+  .coach-plan-banner a { grid-column: 1 / -1; text-align: center; }
 }
 </style>

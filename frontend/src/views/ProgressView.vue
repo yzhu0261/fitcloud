@@ -303,7 +303,7 @@ onMounted(loadProgress)
 .sidebar-card-icon { margin-bottom: 15px; font-size: 1.55rem; }
 .sidebar-card h3 { margin: 0; font-size: 1.45rem; line-height: 1.08; }
 .sidebar-card p { margin: 14px 0 0; color: #536760; font-size: 1rem; line-height: 1.6; }
-.logout-button { width: 100%; margin-top: 18px; padding: 12px; border: 0; border-radius: 10px; background: transparent; color: #52615d; font-size: 1rem; font-weight: 650; cursor: pointer; }
+.logout-button { width: 100%; min-height: 48px; margin-top: 18px; padding: 13px 16px; border: 0; border-radius: 10px; background: transparent; color: #52615d; font-size: 1.12rem; font-weight: 700; cursor: pointer; }
 .logout-button:hover { background: #eef4ef; }
 .main-content { width: 100%; max-width: 1500px; margin: 0 auto; padding: 42px 50px 60px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 30px; margin-bottom: 34px; }

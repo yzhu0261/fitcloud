@@ -1,12 +1,19 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut, fetchAuthSession } from 'aws-amplify/auth'
+import {
+  getTodayPlanDay,
+  loadWeeklyPlan,
+  weeklyPlanUpdatedEvent,
+} from '../services/weeklyPlan'
 
 const router = useRouter()
 
 // Store workout data loaded from the backend.
 const workouts = ref([])
+const weeklyPlan = ref(null)
+const todayPlan = computed(() => getTodayPlanDay(weeklyPlan.value))
 
 // Sign the current user out and return to the login page.
 const handleLogout = async () => {
@@ -55,8 +62,18 @@ const latestWorkout = computed(() => {
 })
 
 // Load workout data when the Dashboard page opens.
+const refreshWeeklyPlan = async (event) => {
+  weeklyPlan.value = event?.detail || (await loadWeeklyPlan())
+}
+
 onMounted(() => {
   loadWorkouts()
+  refreshWeeklyPlan()
+  window.addEventListener(weeklyPlanUpdatedEvent, refreshWeeklyPlan)
+})
+
+onUnmounted(() => {
+  window.removeEventListener(weeklyPlanUpdatedEvent, refreshWeeklyPlan)
 })
 </script>
 
@@ -178,6 +195,20 @@ onMounted(() => {
 
           <span>Most recent session</span>
         </article>
+      </section>
+
+      <section v-if="weeklyPlan" class="ai-plan-card">
+        <div class="ai-plan-icon">✦</div>
+        <div class="ai-plan-copy">
+          <p class="ai-plan-label">TODAY’S AI PLAN</p>
+          <h2>{{ todayPlan ? `Day ${todayPlan.dayNumber}` : 'Weekly plan saved' }}</h2>
+          <p v-if="todayPlan">{{ todayPlan.details }}</p>
+          <p v-else>Your saved plan covers {{ weeklyPlan.startDate }} to {{ weeklyPlan.endDate }}. Ask your coach to create a new plan when you are ready.</p>
+        </div>
+        <div class="ai-plan-actions">
+          <RouterLink v-if="todayPlan" to="/workout?fromPlan=1" class="plan-primary-action">Start workout</RouterLink>
+          <RouterLink to="/coach" class="plan-secondary-action">View plan</RouterLink>
+        </div>
       </section>
 
       <!-- Main actions -->
@@ -349,13 +380,14 @@ onMounted(() => {
 .logout-button {
   width: 100%;
   margin-top: 18px;
-  padding: 12px;
+  min-height: 48px;
+  padding: 13px 16px;
   border: none;
   border-radius: 10px;
   background: transparent;
   color: #52615d;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.12rem;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -481,6 +513,27 @@ onMounted(() => {
 .lime-card {
   background: #e2f58b;
 }
+
+.ai-plan-card {
+  margin-bottom: 24px;
+  padding: 24px 26px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid #cdddb2;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #eef6dc 0%, #e4f0e9 100%);
+}
+
+.ai-plan-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 15px; background: #cbed63; color: #17352c; font-size: 1.35rem; font-weight: 900; }
+.ai-plan-label { margin: 0 0 6px; color: #527064; font-size: .85rem; font-weight: 850; letter-spacing: .09em; }
+.ai-plan-copy h2 { margin: 0; font-size: 1.4rem; }
+.ai-plan-copy > p:last-child { margin: 7px 0 0; color: #52615d; font-size: 1rem; line-height: 1.55; }
+.ai-plan-actions { display: flex; gap: 9px; }
+.ai-plan-actions a { padding: 12px 16px; border-radius: 11px; font-size: .95rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.plan-primary-action { background: #173f34; color: #fff; }
+.plan-secondary-action { border: 1px solid #bfd0c5; background: #fffefd; color: #315e51; }
 
 /* Features */
 
@@ -629,6 +682,9 @@ onMounted(() => {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .ai-plan-card { grid-template-columns: auto 1fr; }
+  .ai-plan-actions { grid-column: 1 / -1; }
 }
 
 .summary-value {

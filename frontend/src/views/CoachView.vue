@@ -1,12 +1,15 @@
 <script setup>
-import { nextTick, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { requestCoachReply } from '../services/aiCoach'
+import { loadWeeklyPlan, parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
 
 const messageInput = ref('')
 const isSending = ref(false)
 const chatError = ref('')
 const messageList = ref(null)
+const savedPlan = ref(null)
+const planNotice = ref('')
 
 const messages = ref([
   {
@@ -31,6 +34,17 @@ const scrollToLatest = async () => {
   })
 }
 
+const handleSavePlan = async (content) => {
+  planNotice.value = ''
+
+  try {
+    savedPlan.value = await saveWeeklyPlan(content)
+    planNotice.value = 'Weekly plan saved. Today’s session is now available on your Dashboard.'
+  } catch (error) {
+    planNotice.value = error.message || 'The weekly plan could not be saved.'
+  }
+}
+
 const sendMessage = async (suggestedMessage) => {
   const message = String(suggestedMessage || messageInput.value).trim()
 
@@ -44,7 +58,11 @@ const sendMessage = async (suggestedMessage) => {
 
   try {
     const reply = await requestCoachReply(message)
-    messages.value.push({ role: 'assistant', content: reply })
+    messages.value.push({
+      role: 'assistant',
+      content: reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+    })
   } catch (error) {
     chatError.value = error.message || 'The AI Coach could not respond.'
   } finally {
@@ -52,6 +70,10 @@ const sendMessage = async (suggestedMessage) => {
     await scrollToLatest()
   }
 }
+
+onMounted(async () => {
+  savedPlan.value = await loadWeeklyPlan()
+})
 </script>
 
 <template>
@@ -94,7 +116,12 @@ const sendMessage = async (suggestedMessage) => {
                 <img v-if="message.role === 'assistant'" src="/images/repvelta-coach-simple.png" alt="" />
                 <template v-else>You</template>
               </div>
-              <p>{{ message.content }}</p>
+              <div class="message-copy">
+                <p>{{ message.content }}</p>
+                <button v-if="message.isWeeklyPlan" type="button" class="save-plan-button" @click="handleSavePlan(message.content)">
+                  Save weekly plan
+                </button>
+              </div>
             </div>
 
             <div v-if="isSending" class="message-row assistant">
@@ -110,6 +137,7 @@ const sendMessage = async (suggestedMessage) => {
           </div>
 
           <p v-if="chatError" class="chat-error">{{ chatError }}</p>
+          <p v-if="planNotice" class="plan-notice">{{ planNotice }}</p>
 
           <form class="composer" @submit.prevent="sendMessage()">
             <textarea v-model="messageInput" maxlength="2000" rows="2" placeholder="Ask about your workouts, nutrition, or weekly plan…" @keydown.enter.exact.prevent="sendMessage()"></textarea>
@@ -127,6 +155,11 @@ const sendMessage = async (suggestedMessage) => {
             <li><span>04</span> Create a goal-aware weekly plan</li>
           </ul>
           <div class="safety-note"><strong>Health note</strong><p>AI guidance is educational and does not replace medical or professional advice.</p></div>
+          <div v-if="savedPlan" class="saved-plan-note">
+            <strong>Saved weekly plan</strong>
+            <p>{{ savedPlan.startDate }} – {{ savedPlan.endDate }}</p>
+            <RouterLink to="/dashboard">View today on Dashboard →</RouterLink>
+          </div>
         </aside>
       </section>
     </section>
@@ -166,13 +199,17 @@ const sendMessage = async (suggestedMessage) => {
 .message-avatar { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 13px; background: #cbed63; color: #17352c; font-size: .85rem; font-weight: 850; }
 .message-avatar img { width: 48px; height: 48px; object-fit: contain; }
 .message-row.user .message-avatar { background: #dcefea; }
-.message-row p { max-width: 76%; margin: 0; padding: 14px 16px; border-radius: 6px 16px 16px; background: #f0f5f1; font-size: 1rem; line-height: 1.6; white-space: pre-wrap; }
+.message-copy { max-width: 76%; display: flex; flex-direction: column; align-items: flex-start; gap: 9px; }
+.message-row.user .message-copy { align-items: flex-end; }
+.message-row p { max-width: none; margin: 0; padding: 14px 16px; border-radius: 6px 16px 16px; background: #f0f5f1; font-size: 1rem; line-height: 1.6; white-space: pre-wrap; }
 .message-row.user p { border-radius: 16px 6px 16px 16px; background: #e9f5ba; }
+.save-plan-button { padding: 10px 14px; border: 0; border-radius: 10px; background: #cbed63; color: #17352c; font-size: .92rem; font-weight: 800; cursor: pointer; }
 .typing span { display: inline-block; animation: pulse 1s ease-in-out infinite; }
 .suggestions { padding: 0 24px 18px; display: flex; flex-wrap: wrap; gap: 8px; }
 .suggestions button { padding: 9px 12px; border: 1px solid #d9e3dc; border-radius: 999px; background: #fff; color: #315e51; font-size: .9rem; font-weight: 650; cursor: pointer; }
 .suggestions button:hover { border-color: #b8ca75; background: #f4f9e3; }
 .chat-error { margin: 0 24px 16px; padding: 12px 14px; border-radius: 10px; background: #fff2f0; color: #a52b20; font-size: .95rem; line-height: 1.45; }
+.plan-notice { margin: 0 24px 16px; padding: 12px 14px; border-radius: 10px; background: #edf7d0; color: #315e51; font-size: .95rem; font-weight: 700; line-height: 1.45; }
 .composer { padding: 18px 24px 24px; border-top: 1px solid #e8ece9; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
 .composer textarea { width: 100%; min-height: 58px; max-height: 150px; resize: vertical; padding: 14px 15px; border: 1px solid #dce2df; border-radius: 13px; outline: none; color: #172033; font: inherit; font-size: 1rem; line-height: 1.5; }
 .composer textarea:focus { border-color: #91ae3e; box-shadow: 0 0 0 3px rgba(203, 237, 99, .25); }
@@ -185,6 +222,8 @@ const sendMessage = async (suggestedMessage) => {
 .coach-info li span { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid #d4e4d9; border-radius: 50%; color: #527064; font-size: .8rem; }
 .safety-note { margin-top: 26px; padding: 18px; border-radius: 14px; background: #fff5cf; }
 .safety-note strong { font-size: 1rem; }.safety-note p { margin: 7px 0 0; color: #665c39; font-size: .93rem; line-height: 1.5; }
+.saved-plan-note { margin-top: 14px; padding: 18px; border-radius: 14px; background: #e5f0e8; }
+.saved-plan-note strong { font-size: 1rem; }.saved-plan-note p { margin: 7px 0 10px; color: #536760; font-size: .93rem; }.saved-plan-note a { color: #315e51; font-size: .93rem; font-weight: 800; text-decoration: none; }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (max-width: 1050px) { .coach-layout { grid-template-columns: 1fr; } .coach-info { order: -1; } }
 @media (max-width: 1000px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } }
