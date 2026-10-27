@@ -160,5 +160,6 @@ const sendMessage = async (suggestedMessage) => {
 .widget-composer button:disabled { opacity: .55; cursor: not-allowed; }
 .full-coach-link { display: block; padding: 4px 22px 18px; color: #315e51; font-size: .95rem; font-weight: 800; text-align: right; text-decoration: none; }
 .coach-panel-enter-active, .coach-panel-leave-active { transition: opacity .18s ease, transform .18s ease; }.coach-panel-enter-from, .coach-panel-leave-to { opacity: 0; transform: translateY(12px) scale(.98); }
-@media (max-width: 600px) { .coach-widget { right: 16px; bottom: 16px; }.coach-launcher { min-width: auto; padding-right: 11px; }.launcher-copy { display: none; }.coach-panel { width: calc(100vw - 32px); height: min(650px, calc(100vh - 32px)); }.widget-messages { padding: 18px; } }
+@media (max-width: 1000px) { .coach-widget { bottom: 94px; }.coach-panel { height: min(680px, calc(100vh - 118px)); } }
+@media (max-width: 600px) { .coach-widget { right: 16px; bottom: 90px; }.coach-launcher { min-width: auto; padding-right: 11px; }.launcher-copy { display: none; }.coach-panel { width: calc(100vw - 32px); height: min(650px, calc(100vh - 118px)); }.widget-messages { padding: 18px; } }
 </style>
