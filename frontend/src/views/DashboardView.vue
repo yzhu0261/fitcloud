@@ -13,7 +13,9 @@ const router = useRouter()
 
 // Store workout data loaded from the backend.
 const workouts = ref([])
+const nutrition = ref([])
 const weeklyWorkoutGoal = ref(3)
+const dailyCalorieGoal = ref(2000)
 const weeklyPlan = ref(null)
 const todayPlan = computed(() => getTodayPlanDay(weeklyPlan.value))
 const isUpdatingPlan = ref(false)
@@ -45,6 +47,25 @@ const loadWorkouts = async () => {
   workouts.value = data
 
   console.log('Dashboard workouts:', workouts.value)
+}
+
+const loadNutrition = async () => {
+  const session = await fetchAuthSession()
+  const idToken = session.tokens?.idToken?.toString()
+
+  const response = await fetch(
+    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+    {
+      headers: { Authorization: idToken },
+    },
+  )
+
+  const result = await response.json()
+  nutrition.value = response.ok
+    ? Array.isArray(result)
+      ? result
+      : (result.nutrition ?? [])
+    : []
 }
 
 // Calculate the total number of exercises across all saved workouts.
@@ -101,7 +122,46 @@ const workoutsRemaining = computed(() =>
   Math.max(0, weeklyWorkoutGoal.value - currentWeekWorkouts.value),
 )
 
-const loadWorkoutGoal = async () => {
+const numberValue = (value) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const todayCalories = computed(() => {
+  const today = toLocalDate(new Date())
+
+  return nutrition.value
+    .filter((record) => record.date === today)
+    .reduce(
+      (recordTotal, record) =>
+        recordTotal +
+        (record.foods ?? []).reduce(
+          (foodTotal, food) => foodTotal + numberValue(food.calories),
+          0,
+        ),
+      0,
+    )
+})
+
+const calorieGoalProgress = computed(() =>
+  Math.min(100, Math.round((todayCalories.value / dailyCalorieGoal.value) * 100)),
+)
+
+const calorieDifference = computed(() => dailyCalorieGoal.value - todayCalories.value)
+
+const calorieGoalMessage = computed(() => {
+  if (calorieDifference.value > 0) {
+    return `${calorieDifference.value.toLocaleString('en-AU')} kcal remaining`
+  }
+
+  if (calorieDifference.value < 0) {
+    return `${Math.abs(calorieDifference.value).toLocaleString('en-AU')} kcal above target`
+  }
+
+  return 'Daily target reached'
+})
+
+const loadGoals = async () => {
   try {
     const user = await getCurrentUser()
     const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
@@ -110,12 +170,22 @@ const loadWorkoutGoal = async () => {
 
     const profile = JSON.parse(savedProfile)
     const savedGoal = Number(profile.weeklyWorkoutGoal)
+    const savedCalorieGoal = Number(profile.dailyCalorieGoal)
 
     if (Number.isFinite(savedGoal) && savedGoal >= 1 && savedGoal <= 14) {
       weeklyWorkoutGoal.value = savedGoal
     }
+
+    if (
+      Number.isFinite(savedCalorieGoal) &&
+      savedCalorieGoal >= 500 &&
+      savedCalorieGoal <= 10000
+    ) {
+      dailyCalorieGoal.value = savedCalorieGoal
+    }
   } catch {
     weeklyWorkoutGoal.value = 3
+    dailyCalorieGoal.value = 2000
   }
 }
 
@@ -145,7 +215,8 @@ const toggleTodayPlan = async () => {
 
 onMounted(() => {
   loadWorkouts()
-  loadWorkoutGoal()
+  loadNutrition()
+  loadGoals()
   refreshWeeklyPlan()
   window.addEventListener(weeklyPlanUpdatedEvent, refreshWeeklyPlan)
 })
@@ -279,7 +350,10 @@ onUnmounted(() => {
           <span>Most recent session</span>
         </article>
 
-        <article class="summary-card goal-card">
+      </section>
+
+      <section class="goals-grid" aria-label="Your goals">
+        <article class="goal-card training-goal">
           <p>Weekly Goal</p>
 
           <div class="goal-heading">
@@ -292,6 +366,23 @@ onUnmounted(() => {
           </div>
 
           <span>{{ workoutsRemaining ? `${workoutsRemaining} workout${workoutsRemaining === 1 ? '' : 's'} remaining` : 'Weekly goal reached' }}</span>
+          <RouterLink to="/account?section=profile" class="goal-link">Edit workout goal →</RouterLink>
+        </article>
+
+        <article class="goal-card nutrition-goal">
+          <p>Today’s Calories</p>
+
+          <div class="goal-heading">
+            <strong>{{ todayCalories.toLocaleString('en-AU') }}</strong>
+            <span>/ {{ dailyCalorieGoal.toLocaleString('en-AU') }} kcal</span>
+          </div>
+
+          <div class="goal-progress calorie-progress" role="progressbar" :aria-valuenow="calorieGoalProgress" aria-valuemin="0" aria-valuemax="100">
+            <span :style="{ width: `${calorieGoalProgress}%` }"></span>
+          </div>
+
+          <span>{{ calorieGoalMessage }}</span>
+          <RouterLink to="/nutrition" class="goal-link">Log nutrition →</RouterLink>
         </article>
       </section>
 
@@ -575,7 +666,7 @@ onUnmounted(() => {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
   margin-bottom: 24px;
 }
@@ -616,8 +707,40 @@ onUnmounted(() => {
   background: #e2f58b;
 }
 
+.goals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
 .goal-card {
+  position: relative;
+  min-height: 190px;
+  padding: 26px;
+  border: 1px solid #d6e2da;
+  border-radius: 20px;
+}
+
+.training-goal {
   background: #e5f0e8;
+}
+
+.nutrition-goal {
+  background: #fff3bd;
+}
+
+.goal-card > p {
+  margin: 0 0 18px;
+  font-size: 1.02rem;
+  font-weight: 750;
+}
+
+.goal-card > span {
+  display: block;
+  margin-top: 9px;
+  color: #52615d;
+  font-size: .95rem;
 }
 
 .goal-heading {
@@ -648,11 +771,30 @@ onUnmounted(() => {
 }
 
 .goal-progress span {
+  display: block;
   height: 100%;
   margin: 0;
   border-radius: inherit;
   background: #79a337;
   transition: width .3s ease;
+}
+
+.calorie-progress span {
+  background: #d19b2d;
+}
+
+.goal-link {
+  position: absolute;
+  top: 24px;
+  right: 26px;
+  color: #315e51;
+  font-size: .92rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.goal-link:hover {
+  text-decoration: underline;
 }
 
 .ai-plan-card {
@@ -808,14 +950,9 @@ onUnmounted(() => {
   }
 
   .summary-grid,
+  .goals-grid,
   .feature-grid {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 1250px) and (min-width: 1001px) {
-  .summary-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 }
 
