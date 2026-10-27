@@ -21,6 +21,8 @@ const weeklyPlan = ref(null)
 const todayPlan = computed(() => getTodayPlanDay(weeklyPlan.value))
 const isUpdatingPlan = ref(false)
 const planActionError = ref('')
+const isLoading = ref(true)
+const loadError = ref('')
 
 // Sign the current user out and return to the login page.
 const handleLogout = async () => {
@@ -33,6 +35,10 @@ const loadWorkouts = async () => {
   const session = await fetchAuthSession()
   const idToken = session.tokens?.idToken?.toString()
 
+  if (!idToken) {
+    throw new Error('Your session has expired. Please sign in again.')
+  }
+
   const response = await fetch(
     'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
     {
@@ -40,14 +46,15 @@ const loadWorkouts = async () => {
       headers: {
         Authorization: `Bearer ${idToken}`,
       },
-    }
+    },
   )
 
+  if (!response.ok) {
+    throw new Error('Your workout data could not be loaded.')
+  }
+
   const data = await response.json()
-
-  workouts.value = data
-
-  console.log('Dashboard workouts:', workouts.value)
+  workouts.value = Array.isArray(data) ? data : (data.workouts ?? [])
 }
 
 const loadNutrition = async () => {
@@ -61,12 +68,12 @@ const loadNutrition = async () => {
     },
   )
 
+  if (!response.ok) {
+    throw new Error('Your nutrition data could not be loaded.')
+  }
+
   const result = await response.json()
-  nutrition.value = response.ok
-    ? Array.isArray(result)
-      ? result
-      : (result.nutrition ?? [])
-    : []
+  nutrition.value = Array.isArray(result) ? result : (result.nutrition ?? [])
 }
 
 // Calculate the total number of exercises across all saved workouts.
@@ -86,6 +93,32 @@ const latestWorkout = computed(() => {
 
   return dates.sort().reverse()[0]
 })
+
+const recentWorkouts = computed(() =>
+  [...workouts.value]
+    .sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))
+    .slice(0, 3),
+)
+
+const formatDate = (date) => {
+  if (!date) return 'Date unavailable'
+
+  const parsed = new Date(`${date}T00:00:00`)
+
+  return Number.isNaN(parsed.getTime())
+    ? date
+    : new Intl.DateTimeFormat('en-AU', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }).format(parsed)
+}
+
+const workoutTitle = (workout) => {
+  const names = (workout.exercises ?? []).map((exercise) => exercise.exercise).filter(Boolean)
+
+  return names.length ? names.join(' · ') : 'Workout session'
+}
 
 const toLocalDate = (date) => {
   const year = date.getFullYear()
@@ -107,12 +140,12 @@ const currentWeekRange = computed(() => {
   return { start: toLocalDate(start), end: toLocalDate(end) }
 })
 
-const currentWeekWorkouts = computed(() =>
-  workouts.value.filter(
-    (workout) =>
-      workout.date >= currentWeekRange.value.start &&
-      workout.date <= currentWeekRange.value.end,
-  ).length,
+const currentWeekWorkouts = computed(
+  () =>
+    workouts.value.filter(
+      (workout) =>
+        workout.date >= currentWeekRange.value.start && workout.date <= currentWeekRange.value.end,
+    ).length,
 )
 
 const weeklyGoalProgress = computed(() =>
@@ -136,10 +169,7 @@ const todayCalories = computed(() => {
     .reduce(
       (recordTotal, record) =>
         recordTotal +
-        (record.foods ?? []).reduce(
-          (foodTotal, food) => foodTotal + numberValue(food.calories),
-          0,
-        ),
+        (record.foods ?? []).reduce((foodTotal, food) => foodTotal + numberValue(food.calories), 0),
       0,
     )
 })
@@ -177,11 +207,7 @@ const loadGoals = async () => {
       weeklyWorkoutGoal.value = savedGoal
     }
 
-    if (
-      Number.isFinite(savedCalorieGoal) &&
-      savedCalorieGoal >= 500 &&
-      savedCalorieGoal <= 10000
-    ) {
+    if (Number.isFinite(savedCalorieGoal) && savedCalorieGoal >= 500 && savedCalorieGoal <= 10000) {
       dailyCalorieGoal.value = savedCalorieGoal
     }
   } catch {
@@ -214,9 +240,21 @@ const toggleTodayPlan = async () => {
   }
 }
 
+const loadDashboard = async () => {
+  isLoading.value = true
+  loadError.value = ''
+
+  try {
+    await Promise.all([loadWorkouts(), loadNutrition()])
+  } catch (error) {
+    loadError.value = error.message || 'Your dashboard could not be loaded.'
+  } finally {
+    isLoading.value = false
+  }
+}
+
 onMounted(() => {
-  loadWorkouts()
-  loadNutrition()
+  loadDashboard()
   loadGoals()
   refreshWeeklyPlan()
   window.addEventListener(weeklyPlanUpdatedEvent, refreshWeeklyPlan)
@@ -285,18 +323,10 @@ onUnmounted(() => {
             Improve.
           </h3>
 
-          <p>
-            Build better habits and keep your progress in one place.
-          </p>
+          <p>Build better habits and keep your progress in one place.</p>
         </div>
 
-        <button
-          type="button"
-          class="logout-button"
-          @click="handleLogout"
-        >
-          Logout
-        </button>
+        <button type="button" class="logout-button" @click="handleLogout">Logout</button>
       </div>
     </aside>
 
@@ -312,151 +342,227 @@ onUnmounted(() => {
         <UserProfileBadge />
       </header>
 
-      <!-- Display a summary of the user's workout activity. -->
-      <section class="summary-grid">
-        <article class="summary-card blue-card">
-          <p>Total Workouts</p>
-
-          <div class="summary-value">
-            {{ workouts.length }}
-          </div>
-
-          <span>Training sessions saved</span>
-        </article>
-
-        <article class="summary-card yellow-card">
-          <p>Total Exercises</p>
-
-          <div class="summary-value">
-            {{ totalExercises }}
-          </div>
-
-          <span>Exercises recorded</span>
-        </article>
-
-        <article class="summary-card lime-card">
-          <p>Latest Workout</p>
-
-          <div class="summary-date">
-            {{ latestWorkout }}
-          </div>
-
-          <span>Most recent session</span>
-        </article>
-
-      </section>
-
-      <section class="goals-grid" aria-label="Your goals">
-        <article class="goal-card training-goal">
-          <p>Weekly Goal</p>
-
-          <div class="goal-heading">
-            <strong>{{ currentWeekWorkouts }}</strong>
-            <span>/ {{ weeklyWorkoutGoal }} sessions</span>
-          </div>
-
-          <div class="goal-progress" role="progressbar" :aria-valuenow="weeklyGoalProgress" aria-valuemin="0" aria-valuemax="100">
-            <span :style="{ width: `${weeklyGoalProgress}%` }"></span>
-          </div>
-
-          <span>{{ workoutsRemaining ? `${workoutsRemaining} workout${workoutsRemaining === 1 ? '' : 's'} remaining` : 'Weekly goal reached' }}</span>
-          <RouterLink to="/account?section=profile" class="goal-link">Edit workout goal →</RouterLink>
-        </article>
-
-        <article class="goal-card nutrition-goal">
-          <p>Today’s Calories</p>
-
-          <div class="goal-heading">
-            <strong>{{ todayCalories.toLocaleString('en-AU') }}</strong>
-            <span>/ {{ dailyCalorieGoal.toLocaleString('en-AU') }} kcal</span>
-          </div>
-
-          <div class="goal-progress calorie-progress" role="progressbar" :aria-valuenow="calorieGoalProgress" aria-valuemin="0" aria-valuemax="100">
-            <span :style="{ width: `${calorieGoalProgress}%` }"></span>
-          </div>
-
-          <span>{{ calorieGoalMessage }}</span>
-          <RouterLink to="/nutrition" class="goal-link">Log nutrition →</RouterLink>
-        </article>
-      </section>
-
-      <section v-if="weeklyPlan" class="ai-plan-card">
-        <div class="ai-plan-icon">✦</div>
-        <div class="ai-plan-copy">
-          <p class="ai-plan-label">TODAY’S AI PLAN</p>
-          <h2>{{ todayPlan ? `Day ${todayPlan.dayNumber}${todayPlan.completed ? ' · Completed' : ''}` : 'Weekly plan saved' }}</h2>
-          <p v-if="todayPlan">{{ todayPlan.details }}</p>
-          <p v-else>Your saved plan covers {{ weeklyPlan.startDate }} to {{ weeklyPlan.endDate }}. Ask your coach to create a new plan when you are ready.</p>
-          <p v-if="planActionError" class="plan-action-error">{{ planActionError }}</p>
-        </div>
-        <div class="ai-plan-actions">
-          <RouterLink v-if="todayPlan" to="/workout?fromPlan=1" class="plan-primary-action">Start workout</RouterLink>
-          <button v-if="todayPlan" type="button" :disabled="isUpdatingPlan" class="plan-complete-action" @click="toggleTodayPlan">
-            {{ todayPlan.completed ? 'Mark incomplete' : 'Mark complete' }}
-          </button>
-          <RouterLink to="/plan" class="plan-secondary-action">View plan</RouterLink>
-        </div>
-      </section>
-
-      <!-- Main actions -->
-      <section class="feature-grid">
-        <RouterLink to="/workout" class="feature-card">
-          <div class="feature-icon blue-icon">◫</div>
-
-          <div>
-            <h2>Today's Workout</h2>
-            <p>
-              Add exercises, record sets and reps, and save your workout.
-            </p>
-          </div>
-
-          <span class="arrow">→</span>
-        </RouterLink>
-
-        <RouterLink to="/nutrition" class="feature-card">
-          <div class="feature-icon yellow-icon">◉</div>
-
-          <div>
-            <h2>Nutrition</h2>
-            <p>
-              Track meals and keep your nutrition information organised.
-            </p>
-          </div>
-
-          <span class="arrow">→</span>
-        </RouterLink>
-
-        <RouterLink to="/progress" class="feature-card">
-          <div class="feature-icon lime-icon">⌁</div>
-
-          <div>
-            <h2>Progress</h2>
-            <p>
-              Review your training history and monitor your progress.
-            </p>
-          </div>
-
-          <span class="arrow">→</span>
-        </RouterLink>
-      </section>
-
-      <!-- Motivation card -->
-      <section class="motivation-card">
+      <div v-if="isLoading" class="state-card" aria-live="polite">
+        <div class="spinner"></div>
         <div>
-          <p class="motivation-label">REPVELTA DAILY</p>
-
-          <h2>Small progress is still progress.</h2>
-
-          <p>
-            Stay consistent, keep tracking, and let your data show how far
-            you've come.
-          </p>
+          <strong>Loading your dashboard</strong>
+          <p>Bringing your latest training and nutrition data together.</p>
         </div>
+      </div>
 
-        <RouterLink to="/workout" class="start-button">
-          Start Workout
-        </RouterLink>
-      </section>
+      <div v-else-if="loadError" class="state-card error-state" role="alert">
+        <div>
+          <strong>Dashboard could not be loaded</strong>
+          <p>{{ loadError }}</p>
+        </div>
+        <button type="button" @click="loadDashboard">Try again</button>
+      </div>
+
+      <template v-else>
+        <!-- Display a summary of the user's workout activity. -->
+        <section class="summary-grid">
+          <article class="summary-card blue-card">
+            <p>Total Workouts</p>
+
+            <div class="summary-value">
+              {{ workouts.length }}
+            </div>
+
+            <span>Training sessions saved</span>
+          </article>
+
+          <article class="summary-card yellow-card">
+            <p>Total Exercises</p>
+
+            <div class="summary-value">
+              {{ totalExercises }}
+            </div>
+
+            <span>Exercises recorded</span>
+          </article>
+
+          <article class="summary-card lime-card">
+            <p>Latest Workout</p>
+
+            <div class="summary-date">
+              {{ latestWorkout }}
+            </div>
+
+            <span>Most recent session</span>
+          </article>
+        </section>
+
+        <section class="goals-grid" aria-label="Your goals">
+          <article class="goal-card training-goal">
+            <p>Weekly Goal</p>
+
+            <div class="goal-heading">
+              <strong>{{ currentWeekWorkouts }}</strong>
+              <span>/ {{ weeklyWorkoutGoal }} sessions</span>
+            </div>
+
+            <div
+              class="goal-progress"
+              role="progressbar"
+              :aria-valuenow="weeklyGoalProgress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span :style="{ width: `${weeklyGoalProgress}%` }"></span>
+            </div>
+
+            <span>{{
+              workoutsRemaining
+                ? `${workoutsRemaining} workout${workoutsRemaining === 1 ? '' : 's'} remaining`
+                : 'Weekly goal reached'
+            }}</span>
+            <RouterLink to="/account?section=profile" class="goal-link"
+              >Edit workout goal →</RouterLink
+            >
+          </article>
+
+          <article class="goal-card nutrition-goal">
+            <p>Today’s Calories</p>
+
+            <div class="goal-heading">
+              <strong>{{ todayCalories.toLocaleString('en-AU') }}</strong>
+              <span>/ {{ dailyCalorieGoal.toLocaleString('en-AU') }} kcal</span>
+            </div>
+
+            <div
+              class="goal-progress calorie-progress"
+              role="progressbar"
+              :aria-valuenow="calorieGoalProgress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span :style="{ width: `${calorieGoalProgress}%` }"></span>
+            </div>
+
+            <span>{{ calorieGoalMessage }}</span>
+            <RouterLink to="/nutrition" class="goal-link">Log nutrition →</RouterLink>
+          </article>
+        </section>
+
+        <section class="recent-card" aria-labelledby="recent-workouts-heading">
+          <div class="recent-heading">
+            <div>
+              <p>RECENT ACTIVITY</p>
+              <h2 id="recent-workouts-heading">Your latest workouts</h2>
+            </div>
+            <RouterLink to="/progress">View all progress →</RouterLink>
+          </div>
+
+          <div v-if="recentWorkouts.length" class="recent-list">
+            <article
+              v-for="workout in recentWorkouts"
+              :key="workout.workoutId"
+              class="recent-workout"
+            >
+              <time :datetime="workout.date">{{ formatDate(workout.date) }}</time>
+              <div>
+                <strong>{{ workout.exercises?.length ?? 0 }} exercises</strong>
+                <p>{{ workoutTitle(workout) }}</p>
+              </div>
+              <RouterLink
+                to="/progress"
+                :aria-label="`View workout from ${formatDate(workout.date)}`"
+                >→</RouterLink
+              >
+            </article>
+          </div>
+
+          <div v-else class="recent-empty">
+            <strong>No workouts saved yet</strong>
+            <p>Your latest sessions will appear here after you save a workout.</p>
+            <RouterLink to="/workout">Start your first workout</RouterLink>
+          </div>
+        </section>
+
+        <section v-if="weeklyPlan" class="ai-plan-card">
+          <div class="ai-plan-icon">✦</div>
+          <div class="ai-plan-copy">
+            <p class="ai-plan-label">TODAY’S AI PLAN</p>
+            <h2>
+              {{
+                todayPlan
+                  ? `Day ${todayPlan.dayNumber}${todayPlan.completed ? ' · Completed' : ''}`
+                  : 'Weekly plan saved'
+              }}
+            </h2>
+            <p v-if="todayPlan">{{ todayPlan.details }}</p>
+            <p v-else>
+              Your saved plan covers {{ weeklyPlan.startDate }} to {{ weeklyPlan.endDate }}. Ask
+              your coach to create a new plan when you are ready.
+            </p>
+            <p v-if="planActionError" class="plan-action-error">{{ planActionError }}</p>
+          </div>
+          <div class="ai-plan-actions">
+            <RouterLink v-if="todayPlan" to="/workout?fromPlan=1" class="plan-primary-action"
+              >Start workout</RouterLink
+            >
+            <button
+              v-if="todayPlan"
+              type="button"
+              :disabled="isUpdatingPlan"
+              class="plan-complete-action"
+              @click="toggleTodayPlan"
+            >
+              {{ todayPlan.completed ? 'Mark incomplete' : 'Mark complete' }}
+            </button>
+            <RouterLink to="/plan" class="plan-secondary-action">View plan</RouterLink>
+          </div>
+        </section>
+
+        <!-- Main actions -->
+        <section class="feature-grid">
+          <RouterLink to="/workout" class="feature-card">
+            <div class="feature-icon blue-icon">◫</div>
+
+            <div>
+              <h2>Today's Workout</h2>
+              <p>Add exercises, record sets and reps, and save your workout.</p>
+            </div>
+
+            <span class="arrow">→</span>
+          </RouterLink>
+
+          <RouterLink to="/nutrition" class="feature-card">
+            <div class="feature-icon yellow-icon">◉</div>
+
+            <div>
+              <h2>Nutrition</h2>
+              <p>Track meals and keep your nutrition information organised.</p>
+            </div>
+
+            <span class="arrow">→</span>
+          </RouterLink>
+
+          <RouterLink to="/progress" class="feature-card">
+            <div class="feature-icon lime-icon">⌁</div>
+
+            <div>
+              <h2>Progress</h2>
+              <p>Review your training history and monitor your progress.</p>
+            </div>
+
+            <span class="arrow">→</span>
+          </RouterLink>
+        </section>
+
+        <!-- Motivation card -->
+        <section class="motivation-card">
+          <div>
+            <p class="motivation-label">REPVELTA DAILY</p>
+
+            <h2>Small progress is still progress.</h2>
+
+            <p>Stay consistent, keep tracking, and let your data show how far you've come.</p>
+          </div>
+
+          <RouterLink to="/workout" class="start-button"> Start Workout </RouterLink>
+        </section>
+      </template>
     </section>
   </main>
 </template>
@@ -472,11 +578,7 @@ onUnmounted(() => {
   grid-template-columns: 270px 1fr;
   background: #f1f5f2;
   color: #172033;
-  font-family:
-    Inter,
-    Arial,
-    Helvetica,
-    sans-serif;
+  font-family: Inter, Arial, Helvetica, sans-serif;
 }
 
 /* Sidebar */
@@ -628,7 +730,9 @@ onUnmounted(() => {
   border: 1px solid #e7e9ed;
   color: inherit;
   text-decoration: none;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .profile:hover {
@@ -654,6 +758,57 @@ onUnmounted(() => {
   margin: 2px 0 0;
   font-size: 0.88rem;
   color: #8b93a0;
+}
+
+.state-card {
+  min-height: 180px;
+  padding: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border: 1px solid #d6e2da;
+  border-radius: 20px;
+  background: #fffefd;
+  text-align: left;
+}
+
+.state-card strong {
+  font-size: 1.2rem;
+}
+.state-card p {
+  margin: 6px 0 0;
+  color: #64736e;
+  font-size: 1rem;
+}
+.state-card button {
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 11px;
+  background: #173f34;
+  color: white;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.error-state {
+  justify-content: space-between;
+  border-color: #efc4bd;
+  background: #fff5f3;
+}
+.spinner {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 4px solid #dfe8e2;
+  border-top-color: #79a337;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Summary */
@@ -734,7 +889,7 @@ onUnmounted(() => {
   display: block;
   margin-top: 9px;
   color: #52615d;
-  font-size: .95rem;
+  font-size: 0.95rem;
 }
 
 .goal-heading {
@@ -761,7 +916,7 @@ onUnmounted(() => {
   margin-top: 20px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(23, 63, 52, .12);
+  background: rgba(23, 63, 52, 0.12);
 }
 
 .goal-progress span {
@@ -770,7 +925,7 @@ onUnmounted(() => {
   margin: 0;
   border-radius: inherit;
   background: #79a337;
-  transition: width .3s ease;
+  transition: width 0.3s ease;
 }
 
 .calorie-progress span {
@@ -782,13 +937,103 @@ onUnmounted(() => {
   top: 24px;
   right: 26px;
   color: #315e51;
-  font-size: .92rem;
+  font-size: 0.92rem;
   font-weight: 800;
   text-decoration: none;
 }
 
 .goal-link:hover {
   text-decoration: underline;
+}
+
+.recent-card {
+  margin-bottom: 24px;
+  padding: 26px;
+  border: 1px solid #d6e2da;
+  border-radius: 20px;
+  background: #fffefd;
+}
+
+.recent-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.recent-heading p {
+  margin: 0 0 6px;
+  color: #6f7c77;
+  font-size: 0.86rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+}
+.recent-heading h2 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+.recent-heading > a {
+  color: #315e51;
+  font-size: 0.96rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+.recent-heading > a:hover {
+  text-decoration: underline;
+}
+.recent-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.recent-workout {
+  min-width: 0;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  border: 1px solid #e1e8e3;
+  border-radius: 15px;
+  background: #f6f8f6;
+}
+.recent-workout time {
+  grid-column: 1 / -1;
+  color: #617069;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+.recent-workout strong {
+  font-size: 1.05rem;
+}
+.recent-workout p {
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: #64736e;
+  font-size: 0.94rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-workout > a {
+  align-self: center;
+  color: #315e51;
+  font-size: 1.35rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+.recent-empty {
+  padding: 24px;
+  border-radius: 15px;
+  background: #f3f7f4;
+  text-align: center;
+}
+.recent-empty p {
+  margin: 7px 0 14px;
+  color: #64736e;
+}
+.recent-empty a {
+  color: #315e51;
+  font-weight: 800;
 }
 
 .ai-plan-card {
@@ -803,17 +1048,71 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #eef6dc 0%, #e4f0e9 100%);
 }
 
-.ai-plan-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 15px; background: #cbed63; color: #17352c; font-size: 1.35rem; font-weight: 900; }
-.ai-plan-label { margin: 0 0 6px; color: #527064; font-size: .85rem; font-weight: 850; letter-spacing: .09em; }
-.ai-plan-copy h2 { margin: 0; font-size: 1.4rem; }
-.ai-plan-copy > p:last-child { margin: 7px 0 0; color: #52615d; font-size: 1rem; line-height: 1.55; }
-.ai-plan-actions { display: flex; gap: 9px; }
-.ai-plan-actions a, .ai-plan-actions button { padding: 12px 16px; border-radius: 11px; font: inherit; font-size: .95rem; font-weight: 800; text-decoration: none; white-space: nowrap; cursor: pointer; }
-.plan-primary-action { background: #173f34; color: #fff; }
-.plan-secondary-action { border: 1px solid #bfd0c5; background: #fffefd; color: #315e51; }
-.plan-complete-action { border: 1px solid #9ebc49; background: #cbed63; color: #17352c; }
-.plan-complete-action:disabled { opacity: .6; cursor: wait; }
-.ai-plan-copy .plan-action-error { color: #a52b20; font-weight: 700; }
+.ai-plan-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: #cbed63;
+  color: #17352c;
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+.ai-plan-label {
+  margin: 0 0 6px;
+  color: #527064;
+  font-size: 0.85rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+}
+.ai-plan-copy h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+.ai-plan-copy > p:last-child {
+  margin: 7px 0 0;
+  color: #52615d;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+.ai-plan-actions {
+  display: flex;
+  gap: 9px;
+}
+.ai-plan-actions a,
+.ai-plan-actions button {
+  padding: 12px 16px;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.plan-primary-action {
+  background: #173f34;
+  color: #fff;
+}
+.plan-secondary-action {
+  border: 1px solid #bfd0c5;
+  background: #fffefd;
+  color: #315e51;
+}
+.plan-complete-action {
+  border: 1px solid #9ebc49;
+  background: #cbed63;
+  color: #17352c;
+}
+.plan-complete-action:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.ai-plan-copy .plan-action-error {
+  color: #a52b20;
+  font-weight: 700;
+}
 
 /* Features */
 
@@ -945,6 +1244,7 @@ onUnmounted(() => {
 
   .summary-grid,
   .goals-grid,
+  .recent-list,
   .feature-grid {
     grid-template-columns: 1fr;
   }
@@ -964,8 +1264,21 @@ onUnmounted(() => {
     flex-direction: column;
   }
 
-  .ai-plan-card { grid-template-columns: auto 1fr; }
-  .ai-plan-actions { grid-column: 1 / -1; }
+  .ai-plan-card {
+    grid-template-columns: auto 1fr;
+  }
+  .ai-plan-actions {
+    grid-column: 1 / -1;
+  }
+  .recent-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .state-card,
+  .error-state {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .summary-value {
