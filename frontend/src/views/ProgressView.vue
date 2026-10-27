@@ -109,6 +109,72 @@ const displayedNutrition = computed(() => {
     : sortedNutrition.value.slice(0, PREVIEW_LIMIT)
 })
 
+const escapeCsvCell = (value) => {
+  const text = String(value ?? '')
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
+}
+
+const downloadCsv = (filename, headers, rows) => {
+  const csv = [headers, ...rows]
+    .map((row) => row.map(escapeCsvCell).join(','))
+    .join('\r\n')
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+  const downloadUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = downloadUrl
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(downloadUrl)
+}
+
+const exportWorkouts = () => {
+  const rows = sortedWorkouts.value.flatMap((workout) =>
+    (workout.exercises ?? []).map((exercise) => {
+      const sets = numberValue(exercise.sets)
+      const reps = numberValue(exercise.reps)
+      const weight = numberValue(exercise.weight)
+
+      return [
+        workout.date,
+        exercise.exercise,
+        exercise.muscleGroup,
+        sets,
+        reps,
+        weight,
+        sets * reps * weight,
+      ]
+    }),
+  )
+
+  downloadCsv(
+    `repvelta-workouts-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Date', 'Exercise', 'Muscle group', 'Sets', 'Reps', 'Weight (kg)', 'Volume (kg)'],
+    rows,
+  )
+}
+
+const exportNutrition = () => {
+  const rows = sortedNutrition.value.flatMap((record) =>
+    (record.foods ?? []).map((food) => [
+      record.date,
+      food.foodName,
+      numberValue(food.calories),
+      numberValue(food.protein),
+      numberValue(food.carbs),
+      numberValue(food.fat),
+    ]),
+  )
+
+  downloadCsv(
+    `repvelta-nutrition-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Date', 'Food', 'Calories (kcal)', 'Protein (g)', 'Carbs (g)', 'Fat (g)'],
+    rows,
+  )
+}
+
 const loadProgress = async () => {
   isLoading.value = true
   loadError.value = ''
@@ -197,7 +263,13 @@ onMounted(loadProgress)
           <h1>Progress</h1>
           <p>See how your training and nutrition are building over time.</p>
         </div>
-        <UserProfileBadge />
+        <div class="topbar-actions">
+          <div class="export-actions" aria-label="Export progress data">
+            <button type="button" :disabled="workouts.length === 0" @click="exportWorkouts">Export workouts</button>
+            <button type="button" :disabled="nutrition.length === 0" @click="exportNutrition">Export nutrition</button>
+          </div>
+          <UserProfileBadge />
+        </div>
       </header>
 
       <div v-if="isLoading" class="state-card">
@@ -309,6 +381,11 @@ onMounted(loadProgress)
 .topbar h1 { margin: 5px 0 8px; font-size: 2.6rem; }
 .topbar > div > p:last-child { margin: 0; color: #596574; font-size: 1.12rem; line-height: 1.55; }
 .eyebrow { margin: 0; color: #65717f; font-size: .95rem; font-weight: 800; letter-spacing: .1em; }
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.export-actions { display: flex; gap: 8px; }
+.export-actions button { min-height: 44px; padding: 10px 13px; border: 1px solid #cdd9d1; border-radius: 11px; background: #fffefd; color: #315e51; font: inherit; font-size: .9rem; font-weight: 780; cursor: pointer; }
+.export-actions button:hover:not(:disabled) { border-color: #9ebc49; background: #f2f7df; }
+.export-actions button:disabled { opacity: .45; cursor: not-allowed; }
 .profile { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border: 1px solid #e7e9ed; border-radius: 999px; background: #fffefd; color: inherit; text-decoration: none; transition: border-color .2s ease, transform .2s ease; }
 .profile:hover { border-color: #b8ca75; transform: translateY(-1px); }
 .profile-avatar { width: 42px; height: 42px; border-radius: 50%; background: #cbed63; display: grid; place-items: center; font-weight: 800; }
@@ -344,7 +421,7 @@ onMounted(loadProgress)
 .error-state strong { color: #a52b20; }
 .retry-button { padding: 11px 17px; border: 0; border-radius: 10px; background: #cbed63; color: #17352c; font-size: 1rem; font-weight: 700; cursor: pointer; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 1100px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .history-grid { grid-template-columns: 1fr; } }
-@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .date-badge { width: 80px; flex-basis: 80px; } }
+@media (max-width: 1200px) { .topbar { align-items: flex-start; }.topbar-actions { flex-direction: column-reverse; align-items: flex-end; }.summary-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.history-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .export-actions { width: 100%; }.date-badge { width: 80px; flex-basis: 80px; } }
 </style>
