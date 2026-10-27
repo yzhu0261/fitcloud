@@ -1,5 +1,6 @@
 <script setup>
 import { RouterLink } from 'vue-router'
+import BrandMark from './BrandMark.vue'
 
 defineProps({
   eyebrow: { type: String, required: true },
@@ -13,7 +14,7 @@ defineProps({
     <div class="auth-frame">
       <section class="story-panel">
       <RouterLink to="/" class="brand" aria-label="RepVelta home">
-        <span class="brand-mark">R</span><span>RepVelta</span>
+        <BrandMark /><span>RepVelta</span>
       </RouterLink>
       <div class="story-content">
         <p class="story-label">BUILT FOR CONSISTENCY</p>

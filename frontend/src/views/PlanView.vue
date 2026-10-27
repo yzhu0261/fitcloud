@@ -3,6 +3,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
+import BrandMark from '../components/BrandMark.vue'
+import AppNavigation from '../components/AppNavigation.vue'
 import {
   deleteWeeklyPlan,
   loadWeeklyPlan,
@@ -109,16 +111,8 @@ onUnmounted(() => {
   <main class="app-shell">
     <aside class="sidebar">
       <div>
-        <div class="brand"><div class="brand-mark">R</div><span>RepVelta</span></div>
-        <nav class="nav-menu">
-          <RouterLink to="/dashboard" class="nav-item"><span>▦</span> Dashboard</RouterLink>
-          <RouterLink to="/workout" class="nav-item"><span>◫</span> Workout</RouterLink>
-          <RouterLink to="/nutrition" class="nav-item"><span>◉</span> Nutrition</RouterLink>
-          <RouterLink to="/progress" class="nav-item"><span>⌁</span> Progress</RouterLink>
-          <RouterLink to="/coach" class="nav-item"><span>✦</span> AI Coach</RouterLink>
-          <RouterLink to="/plan" class="nav-item"><span>✓</span> My Plan</RouterLink>
-          <RouterLink to="/account" class="nav-item"><span>●</span> My Account</RouterLink>
-        </nav>
+        <div class="brand"><BrandMark /><span>RepVelta</span></div>
+        <AppNavigation />
       </div>
 
       <div>

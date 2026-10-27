@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { getCurrentUser, signOut } from 'aws-amplify/auth'
+import BrandMark from '../components/BrandMark.vue'
 
 const router = useRouter()
 
@@ -25,6 +26,7 @@ const handleLogout = async () => {
 
 <template>
   <main class="home">
+    <div class="home-brand"><BrandMark /><span>Movement, made visible.</span></div>
     <h1>RepVelta</h1>
 
     <p>Track your fitness. Understand your nutrition. See your progress.</p>
@@ -68,6 +70,8 @@ const handleLogout = async () => {
   font-size: clamp(3.2rem, 7vw, 5.5rem);
   letter-spacing: -0.05em;
 }
+
+.home-brand { margin: 0 auto 20px; display: inline-flex; align-items: center; gap: 12px; color: #52615d; font-size: .95rem; font-weight: 750; letter-spacing: .02em; }
 
 .home > p {
   max-width: 720px;

@@ -3,6 +3,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut, fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
+import BrandMark from '../components/BrandMark.vue'
+import AppNavigation from '../components/AppNavigation.vue'
+import AppIcon from '../components/AppIcon.vue'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -271,51 +274,16 @@ onUnmounted(() => {
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="brand-mark">R</div>
+          <BrandMark />
           <span>RepVelta</span>
         </div>
 
-        <nav class="nav-menu">
-          <RouterLink to="/dashboard" class="nav-item">
-            <span>▦</span>
-            Dashboard
-          </RouterLink>
-
-          <RouterLink to="/workout" class="nav-item">
-            <span>◫</span>
-            Workout
-          </RouterLink>
-
-          <RouterLink to="/nutrition" class="nav-item">
-            <span>◉</span>
-            Nutrition
-          </RouterLink>
-
-          <RouterLink to="/progress" class="nav-item">
-            <span>⌁</span>
-            Progress
-          </RouterLink>
-
-          <RouterLink to="/coach" class="nav-item">
-            <span>✦</span>
-            AI Coach
-          </RouterLink>
-
-          <RouterLink to="/plan" class="nav-item">
-            <span>✓</span>
-            My Plan
-          </RouterLink>
-
-          <RouterLink to="/account" class="nav-item">
-            <span>●</span>
-            My Account
-          </RouterLink>
-        </nav>
+        <AppNavigation />
       </div>
 
       <div>
         <div class="sidebar-card">
-          <div class="sidebar-card-icon">✦</div>
+          <div class="sidebar-card-icon"><AppIcon name="coach" :size="25" /></div>
 
           <h3>
             Train.<br />
@@ -480,7 +448,7 @@ onUnmounted(() => {
         </section>
 
         <section v-if="weeklyPlan" class="ai-plan-card">
-          <div class="ai-plan-icon">✦</div>
+        <div class="ai-plan-icon"><AppIcon name="coach" :size="27" /></div>
           <div class="ai-plan-copy">
             <p class="ai-plan-label">TODAY’S AI PLAN</p>
             <h2>
@@ -517,7 +485,7 @@ onUnmounted(() => {
         <!-- Main actions -->
         <section class="feature-grid">
           <RouterLink to="/workout" class="feature-card">
-            <div class="feature-icon blue-icon">◫</div>
+            <div class="feature-icon blue-icon"><AppIcon name="workout" :size="27" /></div>
 
             <div>
               <h2>Today's Workout</h2>
@@ -528,7 +496,7 @@ onUnmounted(() => {
           </RouterLink>
 
           <RouterLink to="/nutrition" class="feature-card">
-            <div class="feature-icon yellow-icon">◉</div>
+            <div class="feature-icon yellow-icon"><AppIcon name="nutrition" :size="27" /></div>
 
             <div>
               <h2>Nutrition</h2>
@@ -539,7 +507,7 @@ onUnmounted(() => {
           </RouterLink>
 
           <RouterLink to="/progress" class="feature-card">
-            <div class="feature-icon lime-icon">⌁</div>
+            <div class="feature-icon lime-icon"><AppIcon name="progress" :size="27" /></div>
 
             <div>
               <h2>Progress</h2>

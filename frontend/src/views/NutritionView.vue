@@ -4,39 +4,11 @@
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="brand-logo">R</div>
+          <BrandMark />
           <span>RepVelta</span>
         </div>
 
-        <nav class="nav-menu">
-          <RouterLink to="/dashboard" class="nav-item">
-            Dashboard
-          </RouterLink>
-
-          <RouterLink to="/workout" class="nav-item">
-            Workout
-          </RouterLink>
-
-          <RouterLink to="/nutrition" class="nav-item">
-            Nutrition
-          </RouterLink>
-
-          <RouterLink to="/progress" class="nav-item">
-            Progress
-          </RouterLink>
-
-          <RouterLink to="/coach" class="nav-item">
-            AI Coach
-          </RouterLink>
-
-          <RouterLink to="/plan" class="nav-item">
-            My Plan
-          </RouterLink>
-
-          <RouterLink to="/account" class="nav-item">
-            My Account
-          </RouterLink>
-        </nav>
+        <AppNavigation />
       </div>
 
       <div class="sidebar-bottom">
@@ -290,10 +262,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { signOut } from 'aws-amplify/auth'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
+import BrandMark from '../components/BrandMark.vue'
+import AppNavigation from '../components/AppNavigation.vue'
 
 const router = useRouter()
 

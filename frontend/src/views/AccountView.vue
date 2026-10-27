@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import BrandMark from '../components/BrandMark.vue'
+import AppNavigation from '../components/AppNavigation.vue'
 import {
   deleteUser,
   fetchUserAttributes,
@@ -163,20 +165,13 @@ onMounted(loadAccount)
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="brand-mark">R</div>
+          <BrandMark />
           <span>RepVelta</span>
         </div>
 
-        <nav class="nav-menu">
-          <RouterLink to="/dashboard" class="nav-item"><span>▦</span> Dashboard</RouterLink>
-          <RouterLink to="/workout" class="nav-item"><span>◫</span> Workout</RouterLink>
-          <RouterLink to="/nutrition" class="nav-item"><span>◉</span> Nutrition</RouterLink>
-          <RouterLink to="/progress" class="nav-item"><span>⌁</span> Progress</RouterLink>
-          <RouterLink to="/coach" class="nav-item"><span>✦</span> AI Coach</RouterLink>
-          <RouterLink to="/plan" class="nav-item"><span>✓</span> My Plan</RouterLink>
-          <RouterLink to="/account" class="nav-item"><span>●</span> My Account</RouterLink>
+        <AppNavigation />
 
-          <div class="account-subnav" aria-label="Account settings">
+        <div class="account-subnav" aria-label="Account settings">
             <RouterLink
               :to="{ path: '/account', query: { section: 'profile' } }"
               :class="['account-subnav-item', { active: currentSection === 'profile' }]"
@@ -197,8 +192,7 @@ onMounted(loadAccount)
             >
               Delete account
             </RouterLink>
-          </div>
-        </nav>
+        </div>
       </div>
 
       <div>

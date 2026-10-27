@@ -1,13 +1,14 @@
 <script setup>
 import { RouterLink } from 'vue-router'
+import AppIcon from './AppIcon.vue'
 
 const navigationItems = [
-  { to: '/dashboard', label: 'Home', icon: '▦' },
-  { to: '/workout', label: 'Workout', icon: '◫' },
-  { to: '/nutrition', label: 'Food', icon: '◉' },
-  { to: '/progress', label: 'Progress', icon: '⌁' },
-  { to: '/plan', label: 'Plan', icon: '✓' },
-  { to: '/account', label: 'Account', icon: '●' },
+  { to: '/dashboard', label: 'Home', icon: 'dashboard' },
+  { to: '/workout', label: 'Workout', icon: 'workout' },
+  { to: '/nutrition', label: 'Food', icon: 'nutrition' },
+  { to: '/progress', label: 'Progress', icon: 'progress' },
+  { to: '/plan', label: 'Plan', icon: 'plan' },
+  { to: '/account', label: 'Account', icon: 'account' },
 ]
 </script>
 
@@ -19,7 +20,7 @@ const navigationItems = [
       :to="item.to"
       class="mobile-navigation-item"
     >
-      <span class="mobile-navigation-icon" aria-hidden="true">{{ item.icon }}</span>
+      <span class="mobile-navigation-icon"><AppIcon :name="item.icon" :size="21" /></span>
       <span>{{ item.label }}</span>
     </RouterLink>
   </nav>
@@ -72,7 +73,8 @@ const navigationItems = [
 }
 
 .mobile-navigation-item.router-link-exact-active .mobile-navigation-icon {
-  background: #cbed63;
+  background: #e2f58b;
+  box-shadow: 0 4px 12px rgba(99, 132, 44, .18);
 }
 
 @media (max-width: 1000px) {

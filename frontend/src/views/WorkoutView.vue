@@ -3,6 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { RouterLink, useRoute } from 'vue-router'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
+import BrandMark from '../components/BrandMark.vue'
+import AppNavigation from '../components/AppNavigation.vue'
+import AppIcon from '../components/AppIcon.vue'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -215,50 +218,15 @@ onMounted(() => {
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="brand-mark">R</div>
+          <BrandMark />
           <span>RepVelta</span>
         </div>
 
-        <nav class="nav-menu">
-          <RouterLink to="/dashboard" class="nav-item">
-            <span>▦</span>
-            Dashboard
-          </RouterLink>
-
-          <RouterLink to="/workout" class="nav-item">
-            <span>◫</span>
-            Workout
-          </RouterLink>
-
-          <RouterLink to="/nutrition" class="nav-item">
-            <span>◉</span>
-            Nutrition
-          </RouterLink>
-
-          <RouterLink to="/progress" class="nav-item">
-            <span>⌁</span>
-            Progress
-          </RouterLink>
-
-          <RouterLink to="/coach" class="nav-item">
-            <span>✦</span>
-            AI Coach
-          </RouterLink>
-
-          <RouterLink to="/plan" class="nav-item">
-            <span>✓</span>
-            My Plan
-          </RouterLink>
-
-          <RouterLink to="/account" class="nav-item">
-            <span>●</span>
-            My Account
-          </RouterLink>
-        </nav>
+        <AppNavigation />
       </div>
 
       <div class="sidebar-card">
-        <div class="sidebar-card-icon">✦</div>
+        <div class="sidebar-card-icon"><AppIcon name="coach" :size="25" /></div>
 
         <h3>
           Train.<br />
@@ -284,7 +252,7 @@ onMounted(() => {
       </header>
 
       <section v-if="todayPlan" class="coach-plan-banner" :class="{ active: isPlanWorkout }">
-        <div class="coach-plan-mark">✦</div>
+        <div class="coach-plan-mark"><AppIcon name="coach" :size="25" /></div>
         <div>
           <p>{{ isPlanWorkout ? 'PLAN WORKOUT ACTIVE' : 'REPVELTA COACH' }} · DAY {{ todayPlan.dayNumber }}</p>
           <h2>{{ isPlanWorkout ? 'Complete today’s planned session' : 'Today’s saved plan' }}</h2>
@@ -444,7 +412,7 @@ onMounted(() => {
             v-if="exercises.length === 0"
             class="empty-state"
           >
-            <div class="empty-icon">⌁</div>
+            <div class="empty-icon"><AppIcon name="workout" :size="23" /></div>
 
             <p>No exercises added yet.</p>
           </div>
