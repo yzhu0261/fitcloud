@@ -109,6 +109,55 @@ const displayedNutrition = computed(() => {
     : sortedNutrition.value.slice(0, PREVIEW_LIMIT)
 })
 
+const toLocalDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+const lastSevenDays = computed(() => {
+  const today = new Date()
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (6 - index))
+
+    return {
+      date: toLocalDate(date),
+      label: new Intl.DateTimeFormat('en-AU', { weekday: 'short' }).format(date),
+    }
+  })
+})
+
+const trainingTrend = computed(() =>
+  lastSevenDays.value.map((day) => ({
+    ...day,
+    value: workouts.value.filter((workout) => workout.date === day.date).length,
+  })),
+)
+
+const calorieTrend = computed(() =>
+  lastSevenDays.value.map((day) => ({
+    ...day,
+    value: nutrition.value
+      .filter((record) => record.date === day.date)
+      .reduce((total, record) => total + nutritionTotals(record).calories, 0),
+  })),
+)
+
+const trainingTrendMaximum = computed(() =>
+  Math.max(1, ...trainingTrend.value.map((day) => day.value)),
+)
+
+const calorieTrendMaximum = computed(() =>
+  Math.max(1, ...calorieTrend.value.map((day) => day.value)),
+)
+
+const barHeight = (value, maximum) =>
+  `${value === 0 ? 4 : Math.max(12, Math.round((value / maximum) * 100))}%`
+
 const escapeCsvCell = (value) => {
   const text = String(value ?? '')
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
@@ -299,6 +348,36 @@ onMounted(loadProgress)
           </article>
         </section>
 
+        <section class="trend-grid" aria-label="Seven-day progress trends">
+          <article class="trend-card">
+            <div class="trend-heading">
+              <div><p class="eyebrow">LAST 7 DAYS</p><h2>Training activity</h2></div>
+              <span>{{ trainingTrend.reduce((total, day) => total + day.value, 0) }} sessions</span>
+            </div>
+            <div class="bar-chart" role="img" aria-label="Training sessions saved during the last seven days">
+              <div v-for="day in trainingTrend" :key="day.date" class="bar-column" :title="`${day.date}: ${day.value} session${day.value === 1 ? '' : 's'}`">
+                <strong>{{ day.value }}</strong>
+                <div class="bar-track"><span class="training-bar" :style="{ height: barHeight(day.value, trainingTrendMaximum) }"></span></div>
+                <small>{{ day.label }}</small>
+              </div>
+            </div>
+          </article>
+
+          <article class="trend-card">
+            <div class="trend-heading">
+              <div><p class="eyebrow">LAST 7 DAYS</p><h2>Calories logged</h2></div>
+              <span>Daily totals</span>
+            </div>
+            <div class="bar-chart" role="img" aria-label="Calories logged during the last seven days">
+              <div v-for="day in calorieTrend" :key="day.date" class="bar-column" :title="`${day.date}: ${day.value} kcal`">
+                <strong>{{ day.value.toLocaleString('en-AU') }}</strong>
+                <div class="bar-track"><span class="calorie-bar" :style="{ height: barHeight(day.value, calorieTrendMaximum) }"></span></div>
+                <small>{{ day.label }}</small>
+              </div>
+            </div>
+          </article>
+        </section>
+
         <section class="history-grid">
           <article class="content-card">
             <div class="card-heading">
@@ -397,6 +476,19 @@ onMounted(loadProgress)
 .summary-card strong { display: block; font-size: 3rem; line-height: 1; }
 .summary-card span { display: block; margin-top: 12px; color: #4f5c6b; font-size: .98rem; }
 .blue-card { background: #dcefea; } .yellow-card { background: #fff1a8; } .lime-card { background: #e2f58b; } .pink-card { background: #f6dfe7; }
+.trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-bottom: 24px; }
+.trend-card { min-width: 0; padding: 26px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
+.trend-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
+.trend-heading h2 { margin: 6px 0 0; font-size: 1.45rem; }
+.trend-heading > span { padding: 7px 10px; border-radius: 999px; background: #eef4ef; color: #52615d; font-size: .86rem; font-weight: 750; white-space: nowrap; }
+.bar-chart { display: grid; grid-template-columns: repeat(7, minmax(38px, 1fr)); gap: 10px; height: 220px; }
+.bar-column { display: grid; grid-template-rows: 24px minmax(0, 1fr) 22px; gap: 7px; min-width: 0; text-align: center; }
+.bar-column strong { overflow: hidden; color: #465852; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.bar-column small { color: #6b7772; font-size: .78rem; font-weight: 700; }
+.bar-track { position: relative; overflow: hidden; border-radius: 10px; background: #f0f3f1; }
+.bar-track span { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 10px 10px 6px 6px; transition: height .35s ease; }
+.training-bar { background: linear-gradient(180deg, #cbed63, #88ad3b); }
+.calorie-bar { background: linear-gradient(180deg, #ffd967, #e6a835); }
 .history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 .content-card, .state-card { padding: 26px; border: 1px solid #e7e9ec; border-radius: 20px; background: #fffefd; }
 .card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
@@ -422,6 +514,6 @@ onMounted(loadProgress)
 .retry-button { padding: 11px 17px; border: 0; border-radius: 10px; background: #cbed63; color: #17352c; font-size: 1rem; font-weight: 700; cursor: pointer; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1200px) { .topbar { align-items: flex-start; }.topbar-actions { flex-direction: column-reverse; align-items: flex-end; }.summary-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.history-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.trend-grid, .history-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .export-actions { width: 100%; }.date-badge { width: 80px; flex-basis: 80px; } }
 </style>
