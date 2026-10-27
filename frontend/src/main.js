@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { Amplify } from 'aws-amplify'
+import { Hub } from 'aws-amplify/utils'
 
 import App from './App.vue'
 import router from './router'
@@ -12,6 +13,12 @@ Amplify.configure({
       userPoolClientId: '661p99brp1i82o1aa2ovagud0l',
     },
   },
+})
+
+Hub.listen('auth', ({ payload }) => {
+  if (payload.event === 'signedIn' || payload.event === 'signedOut') {
+    sessionStorage.removeItem('repvelta-profile-badge')
+  }
 })
 
 const app = createApp(App)
