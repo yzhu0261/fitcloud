@@ -56,6 +56,43 @@ const totalExercises = computed(() => {
   )
 })
 
+const muscleGroupColours = {
+  chest: '#ef6a4c',
+  back: '#4f86e8',
+  legs: '#9b51e0',
+  shoulders: '#e0a11d',
+  arms: '#22a897',
+  core: '#7da23a',
+  other: '#7d8b94',
+}
+
+const muscleGroupBreakdown = computed(() => {
+  const groups = workouts.value.reduce((result, workout) => {
+    for (const exercise of workout.exercises ?? []) {
+      const group = String(exercise.muscleGroup || 'other').trim().toLowerCase()
+      result[group] = (result[group] || 0) + 1
+    }
+
+    return result
+  }, {})
+  const total = Object.values(groups).reduce((sum, count) => sum + count, 0)
+
+  return Object.entries(groups)
+    .map(([name, count]) => ({
+      name,
+      count,
+      percentage: total ? Math.round((count / total) * 100) : 0,
+      colour: muscleGroupColours[name] || muscleGroupColours.other,
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+})
+
+const formatMuscleGroup = (group) =>
+  group
+    .split(/[-_\s]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+
 const totalVolume = computed(() => {
   const volume = workouts.value.reduce((workoutTotal, workout) => {
     return (
@@ -372,6 +409,41 @@ onMounted(loadProgress)
           </article>
         </section>
 
+        <section class="balance-card" aria-labelledby="training-balance-heading">
+          <div class="balance-heading">
+            <div>
+              <p class="eyebrow">TRAINING MIX</p>
+              <h2 id="training-balance-heading">Body areas trained</h2>
+              <p>See how your recorded movements are distributed across muscle groups.</p>
+            </div>
+            <span>{{ totalExercises }} recorded movements</span>
+          </div>
+
+          <div v-if="muscleGroupBreakdown.length" class="balance-grid">
+            <article v-for="group in muscleGroupBreakdown" :key="group.name" class="balance-item">
+              <div class="balance-label">
+                <span class="group-dot" :style="{ background: group.colour }"></span>
+                <strong>{{ formatMuscleGroup(group.name) }}</strong>
+                <span>{{ group.count }} · {{ group.percentage }}%</span>
+              </div>
+              <div
+                class="balance-track"
+                role="progressbar"
+                :aria-label="`${formatMuscleGroup(group.name)}: ${group.percentage}%`"
+                :aria-valuenow="group.percentage"
+                aria-valuemin="0"
+                aria-valuemax="100"
+              >
+                <span :style="{ width: `${group.percentage}%`, background: group.colour }"></span>
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="balance-empty">
+            Save a workout to see your training balance.
+          </div>
+        </section>
+
         <section class="history-grid">
           <article class="content-card">
             <div class="card-heading">
@@ -483,6 +555,20 @@ onMounted(loadProgress)
 .bar-track span { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 10px 10px 6px 6px; transition: height .35s ease; }
 .training-bar { background: linear-gradient(180deg, #cbed63, #88ad3b); }
 .calorie-bar { background: linear-gradient(180deg, #ffd967, #e6a835); }
+.balance-card { margin-bottom: 24px; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
+.balance-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.balance-heading h2 { margin: 6px 0 5px; font-size: 1.48rem; }
+.balance-heading div > p:last-child { margin: 0; color: #64716d; font-size: .98rem; line-height: 1.5; }
+.balance-heading > span { padding: 8px 11px; border-radius: 999px; background: #eef4ef; color: #52615d; font-size: .88rem; font-weight: 750; white-space: nowrap; }
+.balance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 34px; row-gap: 22px; }
+.balance-item { min-width: 0; }
+.balance-label { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; margin-bottom: 9px; }
+.balance-label strong { font-size: 1rem; }
+.balance-label > span:last-child { color: #64716d; font-size: .9rem; font-weight: 700; }
+.group-dot { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 4px rgba(73, 88, 82, .06); }
+.balance-track { height: 11px; overflow: hidden; border-radius: 999px; background: #edf1ee; }
+.balance-track span { display: block; height: 100%; border-radius: inherit; transition: width .35s ease; }
+.balance-empty { padding: 26px; border-radius: 14px; background: #f4f7f5; color: #64716d; text-align: center; }
 .history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 .content-card, .state-card { padding: 26px; border: 1px solid #e7e9ec; border-radius: 20px; background: #fffefd; }
 .card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
@@ -509,5 +595,6 @@ onMounted(loadProgress)
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1200px) { .topbar { align-items: flex-start; }.topbar-actions { flex-direction: column-reverse; align-items: flex-end; }.summary-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.trend-grid, .history-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .balance-grid { grid-template-columns: 1fr; }.balance-heading { flex-direction: column; }.balance-heading > span { white-space: normal; } }
 @media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .export-actions { width: 100%; }.date-badge { width: 80px; flex-basis: 80px; } }
 </style>
