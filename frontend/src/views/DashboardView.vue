@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { signOut, fetchAuthSession } from 'aws-amplify/auth'
+import { signOut, fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -13,6 +13,7 @@ const router = useRouter()
 
 // Store workout data loaded from the backend.
 const workouts = ref([])
+const weeklyWorkoutGoal = ref(3)
 const weeklyPlan = ref(null)
 const todayPlan = computed(() => getTodayPlanDay(weeklyPlan.value))
 const isUpdatingPlan = ref(false)
@@ -64,6 +65,60 @@ const latestWorkout = computed(() => {
   return dates.sort().reverse()[0]
 })
 
+const toLocalDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+const currentWeekRange = computed(() => {
+  const today = new Date()
+  const start = new Date(today)
+  const mondayOffset = (today.getDay() + 6) % 7
+  start.setDate(today.getDate() - mondayOffset)
+
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+
+  return { start: toLocalDate(start), end: toLocalDate(end) }
+})
+
+const currentWeekWorkouts = computed(() =>
+  workouts.value.filter(
+    (workout) =>
+      workout.date >= currentWeekRange.value.start &&
+      workout.date <= currentWeekRange.value.end,
+  ).length,
+)
+
+const weeklyGoalProgress = computed(() =>
+  Math.min(100, Math.round((currentWeekWorkouts.value / weeklyWorkoutGoal.value) * 100)),
+)
+
+const workoutsRemaining = computed(() =>
+  Math.max(0, weeklyWorkoutGoal.value - currentWeekWorkouts.value),
+)
+
+const loadWorkoutGoal = async () => {
+  try {
+    const user = await getCurrentUser()
+    const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
+
+    if (!savedProfile) return
+
+    const profile = JSON.parse(savedProfile)
+    const savedGoal = Number(profile.weeklyWorkoutGoal)
+
+    if (Number.isFinite(savedGoal) && savedGoal >= 1 && savedGoal <= 14) {
+      weeklyWorkoutGoal.value = savedGoal
+    }
+  } catch {
+    weeklyWorkoutGoal.value = 3
+  }
+}
+
 // Load workout data when the Dashboard page opens.
 const refreshWeeklyPlan = async (event) => {
   weeklyPlan.value = event?.detail || (await loadWeeklyPlan())
@@ -90,6 +145,7 @@ const toggleTodayPlan = async () => {
 
 onMounted(() => {
   loadWorkouts()
+  loadWorkoutGoal()
   refreshWeeklyPlan()
   window.addEventListener(weeklyPlanUpdatedEvent, refreshWeeklyPlan)
 })
@@ -221,6 +277,21 @@ onUnmounted(() => {
           </div>
 
           <span>Most recent session</span>
+        </article>
+
+        <article class="summary-card goal-card">
+          <p>Weekly Goal</p>
+
+          <div class="goal-heading">
+            <strong>{{ currentWeekWorkouts }}</strong>
+            <span>/ {{ weeklyWorkoutGoal }} sessions</span>
+          </div>
+
+          <div class="goal-progress" role="progressbar" :aria-valuenow="weeklyGoalProgress" aria-valuemin="0" aria-valuemax="100">
+            <span :style="{ width: `${weeklyGoalProgress}%` }"></span>
+          </div>
+
+          <span>{{ workoutsRemaining ? `${workoutsRemaining} workout${workoutsRemaining === 1 ? '' : 's'} remaining` : 'Weekly goal reached' }}</span>
         </article>
       </section>
 
@@ -504,7 +575,7 @@ onUnmounted(() => {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
   margin-bottom: 24px;
 }
@@ -543,6 +614,45 @@ onUnmounted(() => {
 
 .lime-card {
   background: #e2f58b;
+}
+
+.goal-card {
+  background: #e5f0e8;
+}
+
+.goal-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.goal-heading strong {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.goal-heading span {
+  display: inline;
+  margin: 0;
+  color: #52615d;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.goal-progress {
+  height: 10px;
+  margin-top: 20px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(23, 63, 52, .12);
+}
+
+.goal-progress span {
+  height: 100%;
+  margin: 0;
+  border-radius: inherit;
+  background: #79a337;
+  transition: width .3s ease;
 }
 
 .ai-plan-card {
@@ -700,6 +810,12 @@ onUnmounted(() => {
   .summary-grid,
   .feature-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1250px) and (min-width: 1001px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
