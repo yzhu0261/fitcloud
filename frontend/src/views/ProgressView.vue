@@ -93,6 +93,74 @@ const formatMuscleGroup = (group) =>
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 
+const personalBests = computed(() => {
+  const records = new Map()
+
+  for (const workout of workouts.value) {
+    for (const exercise of workout.exercises ?? []) {
+      const name = String(exercise.exercise || '').trim()
+      const weight = numberValue(exercise.weight)
+
+      if (!name || weight <= 0) continue
+
+      const key = name.toLowerCase()
+      const candidate = {
+        name,
+        weight,
+        reps: numberValue(exercise.reps),
+        sets: numberValue(exercise.sets),
+        date: workout.date,
+      }
+      const current = records.get(key)
+
+      if (
+        !current ||
+        candidate.weight > current.weight ||
+        (candidate.weight === current.weight && candidate.reps > current.reps)
+      ) {
+        records.set(key, candidate)
+      }
+    }
+  }
+
+  return [...records.values()]
+    .sort((a, b) => b.weight - a.weight || b.reps - a.reps || a.name.localeCompare(b.name))
+    .slice(0, 5)
+})
+
+const trainingStreak = computed(() => {
+  const dates = [...new Set(workouts.value.map((workout) => workout.date).filter(Boolean))]
+    .map((date) => new Date(`${date}T00:00:00`))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((a, b) => a - b)
+
+  if (dates.length === 0) return { current: 0, longest: 0, latest: '' }
+
+  let longest = 1
+  let running = 1
+
+  for (let index = 1; index < dates.length; index += 1) {
+    const difference = Math.round((dates[index] - dates[index - 1]) / 86400000)
+
+    if (difference === 1) {
+      running += 1
+      longest = Math.max(longest, running)
+    } else if (difference > 1) {
+      running = 1
+    }
+  }
+
+  const today = new Date(`${toLocalDate(new Date())}T00:00:00`)
+  const latestDate = dates.at(-1)
+  const daysSinceLatestWorkout = Math.round((today - latestDate) / 86400000)
+
+  return {
+    current: daysSinceLatestWorkout >= 0 && daysSinceLatestWorkout <= 1 ? running : 0,
+    longest,
+    latest: toLocalDate(latestDate),
+  }
+})
+
 const totalVolume = computed(() => {
   const volume = workouts.value.reduce((workoutTotal, workout) => {
     return (
@@ -444,6 +512,49 @@ onMounted(loadProgress)
           </div>
         </section>
 
+        <section class="achievement-grid" aria-label="Training achievements">
+          <article class="achievement-card personal-best-card">
+            <div class="achievement-heading">
+              <div>
+                <p class="eyebrow">STRENGTH</p>
+                <h2>Personal bests</h2>
+              </div>
+              <RouterLink to="/workout">Log a lift →</RouterLink>
+            </div>
+
+            <div v-if="personalBests.length" class="best-list">
+              <div v-for="(record, index) in personalBests" :key="record.name.toLowerCase()" class="best-item">
+                <span class="best-rank">{{ String(index + 1).padStart(2, '0') }}</span>
+                <div>
+                  <strong>{{ record.name }}</strong>
+                  <p>{{ record.sets }} sets × {{ record.reps }} reps · {{ formatDate(record.date) }}</p>
+                </div>
+                <strong class="best-weight">{{ record.weight.toLocaleString('en-AU') }} <small>kg</small></strong>
+              </div>
+            </div>
+
+            <div v-else class="achievement-empty">
+              Add weight to a recorded exercise to start tracking personal bests.
+            </div>
+          </article>
+
+          <article class="achievement-card streak-card">
+            <div>
+              <p class="eyebrow">CONSISTENCY</p>
+              <h2>Training streak</h2>
+              <p>Consecutive days with at least one saved workout.</p>
+            </div>
+            <div class="streak-number">
+              <strong>{{ trainingStreak.current }}</strong>
+              <span>{{ trainingStreak.current === 1 ? 'day' : 'days' }}</span>
+            </div>
+            <div class="streak-details">
+              <div><span>Longest streak</span><strong>{{ trainingStreak.longest }} days</strong></div>
+              <div><span>Last trained</span><strong>{{ trainingStreak.latest ? formatDate(trainingStreak.latest) : 'Not yet' }}</strong></div>
+            </div>
+          </article>
+        </section>
+
         <section class="history-grid">
           <article class="content-card">
             <div class="card-heading">
@@ -569,6 +680,31 @@ onMounted(loadProgress)
 .balance-track { height: 11px; overflow: hidden; border-radius: 999px; background: #edf1ee; }
 .balance-track span { display: block; height: 100%; border-radius: inherit; transition: width .35s ease; }
 .balance-empty { padding: 26px; border-radius: 14px; background: #f4f7f5; color: #64716d; text-align: center; }
+.achievement-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .75fr); gap: 22px; margin-bottom: 24px; }
+.achievement-card { min-width: 0; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
+.achievement-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+.achievement-heading h2, .streak-card h2 { margin: 6px 0 0; font-size: 1.48rem; }
+.achievement-heading a { color: #315e51; font-size: .95rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.best-list { display: grid; }
+.best-item { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 13px; padding: 15px 0; border-top: 1px solid #edf0ee; }
+.best-rank { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: #eef4ef; color: #64716d; font-size: .78rem; font-weight: 850; }
+.best-item > div { min-width: 0; }
+.best-item > div strong { display: block; overflow: hidden; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
+.best-item p { margin: 5px 0 0; color: #68746f; font-size: .88rem; line-height: 1.4; }
+.best-weight { color: #173f34; font-size: 1.22rem; white-space: nowrap; }
+.best-weight small { color: #65716c; font-size: .76rem; }
+.achievement-empty { margin-top: 18px; padding: 26px; border-radius: 14px; background: #f4f7f5; color: #64716d; text-align: center; }
+.streak-card { position: relative; overflow: hidden; background: linear-gradient(145deg, #173f34, #285c4d); color: white; }
+.streak-card::after { position: absolute; right: -55px; bottom: -70px; width: 190px; height: 190px; border: 30px solid rgba(203, 237, 99, .12); border-radius: 50%; content: ''; }
+.streak-card .eyebrow { color: #cbed63; }
+.streak-card > div:first-child > p:last-child { max-width: 320px; margin: 9px 0 0; color: #d6e3de; font-size: .94rem; line-height: 1.5; }
+.streak-number { position: relative; z-index: 1; display: flex; align-items: baseline; gap: 9px; margin: 28px 0 30px; }
+.streak-number strong { color: #cbed63; font-size: 4.7rem; line-height: .85; }
+.streak-number span { color: #edf5f1; font-size: 1.08rem; font-weight: 750; }
+.streak-details { position: relative; z-index: 1; display: grid; gap: 10px; }
+.streak-details div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, .16); }
+.streak-details span { color: #c7d8d1; font-size: .87rem; }
+.streak-details strong { font-size: .92rem; text-align: right; }
 .history-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
 .content-card, .state-card { padding: 26px; border: 1px solid #e7e9ec; border-radius: 20px; background: #fffefd; }
 .card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
@@ -594,7 +730,7 @@ onMounted(loadProgress)
 .retry-button { padding: 11px 17px; border: 0; border-radius: 10px; background: #cbed63; color: #17352c; font-size: 1rem; font-weight: 700; cursor: pointer; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1200px) { .topbar { align-items: flex-start; }.topbar-actions { flex-direction: column-reverse; align-items: flex-end; }.summary-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.trend-grid, .history-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.trend-grid, .achievement-grid, .history-grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .balance-grid { grid-template-columns: 1fr; }.balance-heading { flex-direction: column; }.balance-heading > span { white-space: normal; } }
-@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .export-actions { width: 100%; }.date-badge { width: 80px; flex-basis: 80px; } }
+@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .export-actions { width: 100%; }.date-badge { width: 80px; flex-basis: 80px; }.achievement-heading { flex-direction: column; }.best-item { grid-template-columns: 34px minmax(0, 1fr); }.best-weight { grid-column: 2; } }
 </style>
