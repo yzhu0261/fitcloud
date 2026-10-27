@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 import {
   deleteUser,
   fetchUserAttributes,
@@ -92,6 +93,7 @@ const saveProfile = () => {
     }),
   )
 
+  window.dispatchEvent(new CustomEvent('repvelta-profile-updated'))
   profileMessage.value = 'Your preferences have been saved on this device.'
 }
 
@@ -225,7 +227,7 @@ onMounted(loadAccount)
 
       <template v-else>
         <section class="account-summary">
-          <div class="avatar">{{ (displayName || email || 'R').charAt(0).toUpperCase() }}</div>
+          <UserAvatar :label="displayName || email || 'RepVelta Member'" :size="68" />
           <div>
             <h2>{{ displayName || 'RepVelta Member' }}</h2>
             <p>{{ email }}</p>

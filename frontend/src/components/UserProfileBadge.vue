@@ -1,33 +1,43 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import { getCurrentUser } from 'aws-amplify/auth'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth'
 import { RouterLink } from 'vue-router'
+import UserAvatar from './UserAvatar.vue'
 
 const displayName = ref('')
-const initial = ref('R')
+const accountLabel = ref('RepVelta Member')
+const avatarLabel = computed(() => displayName.value || accountLabel.value)
 
-onMounted(async () => {
+const loadProfile = async () => {
   try {
-    const user = await getCurrentUser()
+    const [user, attributes] = await Promise.all([getCurrentUser(), fetchUserAttributes()])
     const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
     const profile = savedProfile ? JSON.parse(savedProfile) : null
 
     displayName.value = String(profile?.displayName || '').trim()
-    initial.value = (displayName.value || user.username || 'R').charAt(0).toUpperCase()
+    accountLabel.value = attributes.email || user.username || 'RepVelta Member'
   } catch {
     displayName.value = ''
-    initial.value = 'R'
+    accountLabel.value = 'RepVelta Member'
   }
+}
+
+onMounted(() => {
+  loadProfile()
+  window.addEventListener('repvelta-profile-updated', loadProfile)
 })
+
+onUnmounted(() => window.removeEventListener('repvelta-profile-updated', loadProfile))
 </script>
 
 <template>
   <RouterLink to="/account" class="user-profile-badge">
-    <span class="user-profile-avatar">{{ initial }}</span>
+    <UserAvatar :label="avatarLabel" :size="44" />
     <span class="user-profile-copy">
       <strong>{{ displayName || 'My Account' }}</strong>
       <small>RepVelta Member</small>
     </span>
+    <span class="badge-chevron" aria-hidden="true">›</span>
   </RouterLink>
 </template>
 
@@ -50,24 +60,14 @@ onMounted(async () => {
   transform: translateY(-1px);
 }
 
-.user-profile-avatar {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  place-items: center;
-  border-radius: 50%;
-  background: #cbed63;
-  color: #17352c;
-  font-weight: 850;
-}
-
 .user-profile-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 2px;
 }
+
+.badge-chevron { margin-left: 3px; color: #9aa6a1; font-size: 1.35rem; line-height: 1; }
 
 .user-profile-copy strong {
   max-width: 180px;
