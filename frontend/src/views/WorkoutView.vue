@@ -23,8 +23,18 @@ const weeklyPlan = ref(null)
 const formError = ref('')
 const saveNotice = ref('')
 const isSaving = ref(false)
+const isLoadingHistory = ref(true)
+const historyError = ref('')
+const deletingWorkoutId = ref('')
+const workoutPendingDelete = ref('')
 const todayPlan = ref(null)
 const isPlanWorkout = computed(() => route.query.fromPlan === '1' && Boolean(todayPlan.value))
+const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
+const sortedWorkouts = computed(() =>
+  [...workouts.value].sort((a, b) =>
+    String(b.date ?? '').localeCompare(String(a.date ?? '')),
+  ),
+)
 
 const addExercise = () => {
   formError.value = ''
@@ -80,7 +90,7 @@ const saveWorkout = async () => {
     const idToken = session.tokens?.idToken?.toString()
 
     const response = await fetch(
-      'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
+      `${API_URL}/workouts`,
       {
         method: 'POST',
         headers: {
@@ -123,24 +133,70 @@ const saveWorkout = async () => {
 }
 
 const loadWorkouts = async () => {
-  const session = await fetchAuthSession()
-  const idToken = session.tokens?.idToken?.toString()
+  isLoadingHistory.value = true
+  historyError.value = ''
 
-  const response = await fetch(
-    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
-    {
+  try {
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
+
+    if (!idToken) throw new Error('Your session has expired. Please sign in again.')
+
+    const response = await fetch(`${API_URL}/workouts`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${idToken}`,
       },
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Your workout history could not be loaded.')
     }
-  )
 
-  const data = await response.json()
+    workouts.value = Array.isArray(data) ? data : (data.workouts ?? [])
+  } catch (error) {
+    historyError.value = error.message || 'Your workout history could not be loaded.'
+  } finally {
+    isLoadingHistory.value = false
+  }
+}
 
-  workouts.value = data
+const deleteWorkout = async (workoutId) => {
+  if (!workoutId || deletingWorkoutId.value) return
 
-  console.log('Loaded workouts:', workouts.value)
+  historyError.value = ''
+  saveNotice.value = ''
+  deletingWorkoutId.value = workoutId
+
+  try {
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
+
+    if (!idToken) throw new Error('Your session has expired. Please sign in again.')
+
+    const response = await fetch(
+      `${API_URL}/workouts?workoutId=${encodeURIComponent(workoutId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    )
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.message || 'The workout could not be deleted.')
+    }
+
+    workouts.value = workouts.value.filter((workout) => workout.workoutId !== workoutId)
+    workoutPendingDelete.value = ''
+    saveNotice.value = 'Workout deleted successfully.'
+  } catch (error) {
+    historyError.value = error.message || 'The workout could not be deleted.'
+  } finally {
+    deletingWorkoutId.value = ''
+  }
 }
 
 onMounted(() => {
@@ -447,19 +503,47 @@ onMounted(() => {
           </div>
 
           <div
-            v-if="workouts.length === 0"
+            v-if="isLoadingHistory"
+            class="empty-state"
+            aria-live="polite"
+          >
+            <div class="history-spinner"></div>
+            <p>Loading workout history...</p>
+          </div>
+
+          <div
+            v-else-if="historyError"
+            class="history-error"
+            role="alert"
+          >
+            <p>{{ historyError }}</p>
+            <button type="button" @click="loadWorkouts">Try again</button>
+          </div>
+
+          <div
+            v-else-if="workouts.length === 0"
             class="empty-state"
           >
             <p>No workouts found.</p>
           </div>
 
           <div
-            v-for="workout in workouts"
+            v-for="workout in sortedWorkouts"
             :key="workout.workoutId"
             class="history-item"
           >
-            <div class="history-date">
-              {{ workout.date }}
+            <div class="history-item-heading">
+              <div class="history-date">
+                {{ workout.date }}
+              </div>
+              <button
+                v-if="workoutPendingDelete !== workout.workoutId"
+                type="button"
+                class="delete-workout-button"
+                @click="workoutPendingDelete = workout.workoutId"
+              >
+                Delete
+              </button>
             </div>
 
             <div
@@ -480,6 +564,23 @@ onMounted(() => {
               <span class="muscle-badge">
                 {{ item.muscleGroup }}
               </span>
+            </div>
+
+            <div
+              v-if="workoutPendingDelete === workout.workoutId"
+              class="delete-confirmation"
+              role="alert"
+            >
+              <p><strong>Delete this workout?</strong><span>This cannot be undone.</span></p>
+              <button type="button" :disabled="Boolean(deletingWorkoutId)" @click="workoutPendingDelete = ''">Cancel</button>
+              <button
+                type="button"
+                class="confirm-delete-button"
+                :disabled="Boolean(deletingWorkoutId)"
+                @click="deleteWorkout(workout.workoutId)"
+              >
+                {{ deletingWorkoutId === workout.workoutId ? 'Deleting…' : 'Yes, delete' }}
+              </button>
             </div>
           </div>
         </article>
@@ -977,11 +1078,25 @@ onMounted(() => {
 }
 
 .history-date {
-  margin-bottom: 10px;
   font-size: 0.92rem;
   color: #8d95a1;
   font-weight: 700;
 }
+
+.history-item-heading { min-height: 34px; margin-bottom: 7px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.delete-workout-button { padding: 7px 10px; border: 1px solid #e3c2bd; border-radius: 9px; background: #fff; color: #a43a30; font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; }
+.delete-workout-button:hover { background: #fff2ef; }
+.delete-confirmation { margin-top: 10px; padding: 13px; display: flex; align-items: center; gap: 8px; border-radius: 11px; background: #fff0ed; }
+.delete-confirmation p { margin: 0 auto 0 0; display: flex; flex-direction: column; color: #7e322b; font-size: .92rem; }
+.delete-confirmation p span { margin-top: 2px; color: #985f58; }
+.delete-confirmation button { padding: 8px 11px; border: 1px solid #d8c2be; border-radius: 9px; background: white; color: #5b4c49; font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; }
+.delete-confirmation .confirm-delete-button { border-color: #a33b31; background: #a33b31; color: white; }
+.delete-confirmation button:disabled { opacity: .55; cursor: wait; }
+.history-error { margin: 16px 0; padding: 14px; border-radius: 11px; background: #fff1f0; color: #8f2e25; }
+.history-error p { margin: 0 0 10px; }
+.history-error button { padding: 8px 12px; border: 0; border-radius: 8px; background: #8f2e25; color: white; font: inherit; font-weight: 750; cursor: pointer; }
+.history-spinner { width: 30px; height: 30px; border: 4px solid #dfe8e2; border-top-color: #79a337; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .history-exercise {
   padding: 8px 0;

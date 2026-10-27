@@ -77,4 +77,9 @@ VITE_PLANS_API_URL=https://your-api-id.execute-api.ap-southeast-2.amazonaws.com/
 
 Until that variable is configured, the frontend continues using per-user browser storage so local development remains functional.
 
+## Delete workout Lambda
+
+`backend/delete-workout` contains the authenticated handler used by `DELETE /workouts?workoutId=...`.
+The Lambda execution role needs `dynamodb:DeleteItem` permission for the `FitCloudWorkouts` table only. Configure `WORKOUTS_TABLE` if the deployed table uses a different name, attach the existing Cognito JWT authorizer to the API Gateway route, and use `index.handler` as the Lambda handler.
+
 ![RepVelta AWS Architecture](docs/architecture/fitcloud-aws-architecture.png)
