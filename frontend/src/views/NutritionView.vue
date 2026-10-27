@@ -63,10 +63,7 @@
           </p>
         </div>
 
-        <RouterLink to="/account" class="account-pill">
-          <span>My Account</span>
-          <small>RepVelta Member</small>
-        </RouterLink>
+        <UserProfileBadge />
       </header>
 
       <!-- Display today's nutrition summary. -->
@@ -296,6 +293,7 @@ import { ref, computed, onMounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut } from 'aws-amplify/auth'
 import { fetchAuthSession } from 'aws-amplify/auth'
+import UserProfileBadge from '../components/UserProfileBadge.vue'
 
 const router = useRouter()
 

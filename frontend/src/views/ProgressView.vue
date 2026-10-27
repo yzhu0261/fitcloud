@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { fetchAuthSession, signOut } from 'aws-amplify/auth'
 import { RouterLink, useRouter } from 'vue-router'
+import UserProfileBadge from '../components/UserProfileBadge.vue'
 
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 
@@ -196,10 +197,7 @@ onMounted(loadProgress)
           <h1>Progress</h1>
           <p>See how your training and nutrition are building over time.</p>
         </div>
-        <RouterLink to="/account" class="profile">
-          <div class="profile-avatar">A</div>
-          <div><strong>My Account</strong><p>RepVelta Member</p></div>
-        </RouterLink>
+        <UserProfileBadge />
       </header>
 
       <div v-if="isLoading" class="state-card">

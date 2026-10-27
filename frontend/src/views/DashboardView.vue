@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut, fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
+import UserProfileBadge from '../components/UserProfileBadge.vue'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -308,14 +309,7 @@ onUnmounted(() => {
           <p>Here is an overview of your RepVelta activity.</p>
         </div>
 
-        <RouterLink to="/account" class="profile">
-          <div class="profile-avatar">A</div>
-
-          <div>
-            <strong>My Account</strong>
-            <p>RepVelta Member</p>
-          </div>
-        </RouterLink>
+        <UserProfileBadge />
       </header>
 
       <!-- Display a summary of the user's workout activity. -->

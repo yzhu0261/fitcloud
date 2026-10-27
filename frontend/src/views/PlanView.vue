@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { signOut } from 'aws-amplify/auth'
+import UserProfileBadge from '../components/UserProfileBadge.vue'
 import {
   deleteWeeklyPlan,
   loadWeeklyPlan,
@@ -137,10 +138,7 @@ onUnmounted(() => {
           <h1>My Plan</h1>
           <p>Follow your seven-day plan and keep track of each completed day.</p>
         </div>
-        <RouterLink to="/account" class="profile">
-          <span class="profile-avatar">A</span>
-          <span><strong>My Account</strong><small>RepVelta Member</small></span>
-        </RouterLink>
+        <UserProfileBadge />
       </header>
 
       <p v-if="pageError" class="feedback error" role="alert">{{ pageError }}</p>

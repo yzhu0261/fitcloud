@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import UserProfileBadge from '../components/UserProfileBadge.vue'
 import { requestCoachReply } from '../services/aiCoach'
 import { loadWeeklyPlan, parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
 
@@ -106,7 +107,7 @@ onMounted(async () => {
           <h1>AI Fitness Coach</h1>
           <p>Get personalised observations and weekly plans from your goals and saved activity.</p>
         </div>
-        <RouterLink to="/account" class="profile"><span class="profile-avatar">A</span><span><strong>My Account</strong><small>RepVelta Member</small></span></RouterLink>
+        <UserProfileBadge />
       </header>
 
       <section class="coach-layout">

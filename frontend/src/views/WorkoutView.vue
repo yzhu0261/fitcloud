@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { RouterLink, useRoute } from 'vue-router'
+import UserProfileBadge from '../components/UserProfileBadge.vue'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -223,14 +224,7 @@ onMounted(() => {
           <p>Build your session and track your training progress.</p>
         </div>
 
-        <RouterLink to="/account" class="profile">
-          <div class="profile-avatar">A</div>
-
-          <div>
-            <strong>My Account</strong>
-            <p>RepVelta Member</p>
-          </div>
-        </RouterLink>
+        <UserProfileBadge />
       </header>
 
       <section v-if="todayPlan" class="coach-plan-banner" :class="{ active: isPlanWorkout }">
