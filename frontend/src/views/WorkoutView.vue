@@ -1,8 +1,14 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { fetchAuthSession } from 'aws-amplify/auth'
-import { RouterLink } from 'vue-router'
-import { getTodayPlanDay, loadWeeklyPlan } from '../services/weeklyPlan'
+import { RouterLink, useRoute } from 'vue-router'
+import {
+  getTodayPlanDay,
+  loadWeeklyPlan,
+  updateWeeklyPlanDay,
+} from '../services/weeklyPlan'
+
+const route = useRoute()
 
 const muscleGroup = ref('')
 const exercise = ref('')
@@ -12,8 +18,12 @@ const weight = ref('')
 
 const exercises = ref([])
 const workouts = ref([])
+const weeklyPlan = ref(null)
 const formError = ref('')
+const saveNotice = ref('')
+const isSaving = ref(false)
 const todayPlan = ref(null)
+const isPlanWorkout = computed(() => route.query.fromPlan === '1' && Boolean(todayPlan.value))
 
 const addExercise = () => {
   formError.value = ''
@@ -50,39 +60,65 @@ const removeExercise = (index) => {
 
 const saveWorkout = async () => {
   formError.value = ''
+  saveNotice.value = ''
 
   if (exercises.value.length === 0) {
     formError.value = 'Please add at least one exercise.'
     return
   }
 
-  const workout = {
-    date: new Date().toISOString().split('T')[0],
-    exercises: exercises.value,
-  }
+  isSaving.value = true
 
-  const session = await fetchAuthSession()
-  const idToken = session.tokens?.idToken?.toString()
-
-  const response = await fetch(
-    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
-    {
-      method: 'POST',
-      headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify(workout),
+  try {
+    const workout = {
+      date: new Date().toISOString().split('T')[0],
+      exercises: exercises.value,
     }
-  )
 
-  const result = await response.json()
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
 
-  console.log('API response:', result)
+    const response = await fetch(
+      'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(workout),
+      },
+    )
 
-  await loadWorkouts()
+    const result = await response.json()
 
-  console.log('Saved workouts:', workouts.value)
+    if (!response.ok) {
+      throw new Error(result.message || 'Your workout could not be saved.')
+    }
+
+    exercises.value = []
+    await loadWorkouts()
+
+    if (isPlanWorkout.value && !todayPlan.value.completed) {
+      try {
+        weeklyPlan.value = await updateWeeklyPlanDay(
+          weeklyPlan.value,
+          todayPlan.value.dayNumber,
+          true,
+        )
+        todayPlan.value = getTodayPlanDay(weeklyPlan.value)
+        saveNotice.value = `Workout saved and Day ${todayPlan.value.dayNumber} marked complete.`
+      } catch {
+        saveNotice.value = 'Workout saved, but today’s plan could not be marked complete. You can update it from My Plan.'
+      }
+    } else {
+      saveNotice.value = 'Workout saved successfully.'
+    }
+  } catch (error) {
+    formError.value = error.message || 'Your workout could not be saved.'
+  } finally {
+    isSaving.value = false
+  }
 }
 
 const loadWorkouts = async () => {
@@ -109,6 +145,7 @@ const loadWorkouts = async () => {
 onMounted(() => {
   loadWorkouts()
   loadWeeklyPlan().then((plan) => {
+    weeklyPlan.value = plan
     todayPlan.value = getTodayPlanDay(plan)
   })
 })
@@ -196,12 +233,13 @@ onMounted(() => {
         </RouterLink>
       </header>
 
-      <section v-if="todayPlan" class="coach-plan-banner">
+      <section v-if="todayPlan" class="coach-plan-banner" :class="{ active: isPlanWorkout }">
         <div class="coach-plan-mark">✦</div>
         <div>
-          <p>REPVELTA COACH · DAY {{ todayPlan.dayNumber }}</p>
-          <h2>Today’s saved plan</h2>
+          <p>{{ isPlanWorkout ? 'PLAN WORKOUT ACTIVE' : 'REPVELTA COACH' }} · DAY {{ todayPlan.dayNumber }}</p>
+          <h2>{{ isPlanWorkout ? 'Complete today’s planned session' : 'Today’s saved plan' }}</h2>
           <div>{{ todayPlan.details }}</div>
+          <small v-if="isPlanWorkout">Saving this workout will automatically mark today’s plan complete.</small>
         </div>
         <RouterLink to="/plan">View full plan →</RouterLink>
       </section>
@@ -227,9 +265,9 @@ onMounted(() => {
         <article class="summary-card lime-card">
           <p>Today's Focus</p>
           <div class="summary-text">
-            Keep moving
+            {{ todayPlan ? `Plan Day ${todayPlan.dayNumber}` : 'Keep moving' }}
           </div>
-          <span>One session at a time</span>
+          <span>{{ isPlanWorkout ? 'Plan-linked session' : 'One session at a time' }}</span>
         </article>
       </section>
 
@@ -322,6 +360,8 @@ onMounted(() => {
           {{ formError }}
         </p>
 
+        <p v-if="saveNotice" class="success-message">{{ saveNotice }}</p>
+
         <div class="form-actions">
           <button
             type="button"
@@ -392,10 +432,10 @@ onMounted(() => {
           <button
             type="button"
             class="save-button"
-            :disabled="exercises.length === 0"
+            :disabled="exercises.length === 0 || isSaving"
             @click="saveWorkout"
           >
-            Save Workout
+            {{ isSaving ? 'Saving…' : isPlanWorkout ? 'Save & Complete Plan Day' : 'Save Workout' }}
           </button>
         </article>
 
@@ -627,10 +667,12 @@ onMounted(() => {
 }
 
 .coach-plan-banner { margin-bottom: 24px; padding: 22px 24px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 17px; border: 1px solid #cdddb2; border-radius: 18px; background: linear-gradient(135deg, #eef6dc 0%, #e4f0e9 100%); }
+.coach-plan-banner.active { border-color: #86a842; box-shadow: 0 0 0 4px rgba(203, 237, 99, .2); }
 .coach-plan-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: #cbed63; color: #17352c; font-size: 1.25rem; font-weight: 900; }
 .coach-plan-banner p { margin: 0 0 5px; color: #527064; font-size: .82rem; font-weight: 850; letter-spacing: .08em; }
 .coach-plan-banner h2 { margin: 0 0 7px; font-size: 1.35rem; }
 .coach-plan-banner div > div { color: #52615d; font-size: 1rem; line-height: 1.55; }
+.coach-plan-banner small { display: block; margin-top: 8px; color: #315e51; font-size: .92rem; font-weight: 750; }
 .coach-plan-banner a { padding: 11px 14px; border: 1px solid #bfd0c5; border-radius: 11px; background: #fffefd; color: #315e51; font-size: .95rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
 
 /* Summary */
@@ -805,6 +847,16 @@ onMounted(() => {
   background: #fff1f0;
   color: #b42318;
   font-size: 1rem;
+}
+
+.success-message {
+  margin-top: 16px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: #edf7d0;
+  color: #315e51;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 /* Bottom dashboard */
