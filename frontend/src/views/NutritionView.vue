@@ -133,6 +133,28 @@
           </button>
         </div>
 
+        <div class="food-suggestions">
+          <div class="suggestion-heading">
+            <div>
+              <strong>{{ recentFoodPresets.length ? 'Recently logged' : 'Quick foods' }}</strong>
+              <span>Values are editable before adding</span>
+            </div>
+            <small v-if="!recentFoodPresets.length">Approximate values per listed serving</small>
+          </div>
+          <div class="suggestion-list">
+            <button
+              v-for="preset in suggestedFoods"
+              :key="preset.foodName.toLowerCase()"
+              type="button"
+              :class="{ selected: foodName === preset.foodName }"
+              @click="chooseFood(preset)"
+            >
+              <span>{{ preset.foodName }}</span>
+              <small>{{ preset.calories }} kcal</small>
+            </button>
+          </div>
+        </div>
+
         <p v-if="formError" class="form-error">
           {{ formError }}
         </p>
@@ -271,6 +293,17 @@ import AppNavigation from '../components/AppNavigation.vue'
 
 const router = useRouter()
 
+const FOOD_PRESETS = [
+  { foodName: 'Chicken Breast (100 g)', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
+  { foodName: 'Cooked White Rice (1 cup)', calories: 205, protein: 4.3, carbs: 44.5, fat: 0.4 },
+  { foodName: 'Eggs (2 large)', calories: 144, protein: 12.6, carbs: 0.7, fat: 9.5 },
+  { foodName: 'Banana (1 medium)', calories: 105, protein: 1.3, carbs: 27, fat: 0.4 },
+  { foodName: 'Oats (50 g)', calories: 190, protein: 6.5, carbs: 33, fat: 3.5 },
+  { foodName: 'Greek Yogurt (200 g)', calories: 118, protein: 20, carbs: 7, fat: 0.8 },
+  { foodName: 'Salmon (100 g)', calories: 208, protein: 20, carbs: 0, fat: 13 },
+  { foodName: 'Whey Protein (1 scoop)', calories: 120, protein: 24, carbs: 3, fat: 2 },
+]
+
 // Store the user's food input.
 const foodName = ref('')
 const calories = ref('')
@@ -283,6 +316,35 @@ const foods = ref([])
 
 // Store nutrition records loaded from the backend.
 const nutritionHistory = ref([])
+
+const recentFoodPresets = computed(() => {
+  const seen = new Set()
+
+  return [...nutritionHistory.value]
+    .sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))
+    .flatMap((record) => record.foods ?? [])
+    .filter((food) => {
+      const key = String(food.foodName || '').trim().toLowerCase()
+
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, 6)
+})
+
+const suggestedFoods = computed(() =>
+  recentFoodPresets.value.length ? recentFoodPresets.value : FOOD_PRESETS.slice(0, 6),
+)
+
+const chooseFood = (preset) => {
+  foodName.value = preset.foodName
+  calories.value = preset.calories
+  protein.value = preset.protein
+  carbs.value = preset.carbs
+  fat.value = preset.fat
+  formError.value = ''
+}
 
 // Calculate the total nutrition values from today's food records.
 const totalCalories = computed(() => {
@@ -734,6 +796,74 @@ const deleteNutrition = async (nutritionId) => {
   border-color: #a9bc55;
 }
 
+.food-suggestions {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e4eae6;
+  border-radius: 14px;
+  background: #f7faf8;
+}
+
+.suggestion-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.suggestion-heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.suggestion-heading strong {
+  font-size: 0.95rem;
+}
+
+.suggestion-heading span,
+.suggestion-heading > small {
+  color: #718079;
+  font-size: 0.82rem;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.suggestion-list button {
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8e1dc;
+  border-radius: 999px;
+  background: #fffefd;
+  color: #28483e;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.suggestion-list button:hover,
+.suggestion-list button.selected {
+  border-color: #9ebc49;
+  background: #e9f6b9;
+  transform: translateY(-1px);
+}
+
+.suggestion-list button small {
+  color: #718079;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .add-button {
   border: none;
   background: #cbed63;
@@ -935,6 +1065,19 @@ const deleteNutrition = async (nutritionId) => {
 
   .main-content {
     padding: 24px 16px 40px;
+  }
+
+  .suggestion-heading,
+  .suggestion-heading > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .suggestion-list button {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: 11px;
   }
 }
 </style>
