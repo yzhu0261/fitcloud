@@ -14,6 +14,32 @@ import {
 
 const route = useRoute()
 
+const EXERCISE_LIBRARY = [
+  { name: 'Bench Press', group: 'chest' },
+  { name: 'Incline Dumbbell Press', group: 'chest' },
+  { name: 'Chest Fly', group: 'chest' },
+  { name: 'Push-Up', group: 'chest' },
+  { name: 'Lat Pulldown', group: 'back' },
+  { name: 'Seated Cable Row', group: 'back' },
+  { name: 'Barbell Row', group: 'back' },
+  { name: 'Pull-Up', group: 'back' },
+  { name: 'Back Squat', group: 'legs' },
+  { name: 'Romanian Deadlift', group: 'legs' },
+  { name: 'Leg Press', group: 'legs' },
+  { name: 'Walking Lunge', group: 'legs' },
+  { name: 'Dumbbell Shoulder Press', group: 'shoulders' },
+  { name: 'Lateral Raise', group: 'shoulders' },
+  { name: 'Face Pull', group: 'shoulders' },
+  { name: 'Barbell Curl', group: 'arms' },
+  { name: 'Hammer Curl', group: 'arms' },
+  { name: 'Tricep Pushdown', group: 'arms' },
+  { name: 'Dips', group: 'arms' },
+  { name: 'Plank', group: 'core' },
+  { name: 'Cable Crunch', group: 'core' },
+  { name: 'Russian Twist', group: 'core' },
+  { name: 'Hanging Knee Raise', group: 'core' },
+]
+
 const muscleGroup = ref('')
 const exercise = ref('')
 const sets = ref('')
@@ -38,6 +64,40 @@ const sortedWorkouts = computed(() =>
     String(b.date ?? '').localeCompare(String(a.date ?? '')),
   ),
 )
+
+const recentExercisePresets = computed(() => {
+  const seen = new Set()
+
+  return sortedWorkouts.value
+    .flatMap((workout) => workout.exercises ?? [])
+    .map((item) => ({
+      name: String(item.exercise || '').trim(),
+      group: String(item.muscleGroup || '').trim().toLowerCase(),
+    }))
+    .filter((item) => {
+      const key = item.name.toLowerCase()
+
+      if (!item.name || !item.group || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+})
+
+const suggestedExercises = computed(() => {
+  if (muscleGroup.value) {
+    return EXERCISE_LIBRARY.filter((item) => item.group === muscleGroup.value).slice(0, 5)
+  }
+
+  return recentExercisePresets.value.length
+    ? recentExercisePresets.value.slice(0, 5)
+    : EXERCISE_LIBRARY.slice(0, 5)
+})
+
+const chooseExercise = (preset) => {
+  muscleGroup.value = preset.group
+  exercise.value = preset.name
+  formError.value = ''
+}
 
 const addExercise = () => {
   formError.value = ''
@@ -327,9 +387,32 @@ onMounted(() => {
             <input
               id="exercise"
               v-model="exercise"
+              list="exerciseSuggestions"
               type="text"
               placeholder="e.g. Bench Press"
             />
+            <datalist id="exerciseSuggestions">
+              <option v-for="item in EXERCISE_LIBRARY" :key="item.name" :value="item.name" />
+            </datalist>
+          </div>
+        </div>
+
+        <div class="exercise-suggestions">
+          <div class="suggestion-heading">
+            <strong>{{ muscleGroup ? `${muscleGroup} exercises` : workouts.length ? 'Recently trained' : 'Popular exercises' }}</strong>
+            <span>Choose one or enter your own</span>
+          </div>
+          <div class="suggestion-list">
+            <button
+              v-for="preset in suggestedExercises"
+              :key="`${preset.group}-${preset.name}`"
+              type="button"
+              :class="{ selected: exercise === preset.name }"
+              @click="chooseExercise(preset)"
+            >
+              <span>{{ preset.name }}</span>
+              <small>{{ preset.group }}</small>
+            </button>
           </div>
         </div>
 
@@ -878,6 +961,68 @@ onMounted(() => {
   box-shadow: 0 0 0 3px rgba(173, 211, 235, 0.22);
 }
 
+.exercise-suggestions {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e4eae6;
+  border-radius: 14px;
+  background: #f7faf8;
+}
+
+.suggestion-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.suggestion-heading strong {
+  font-size: 0.95rem;
+  text-transform: capitalize;
+}
+
+.suggestion-heading span {
+  color: #718079;
+  font-size: 0.84rem;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.suggestion-list button {
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8e1dc;
+  border-radius: 999px;
+  background: #fffefd;
+  color: #28483e;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.suggestion-list button:hover,
+.suggestion-list button.selected {
+  border-color: #9ebc49;
+  background: #e9f6b9;
+  transform: translateY(-1px);
+}
+
+.suggestion-list small {
+  color: #718079;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -1125,6 +1270,18 @@ onMounted(() => {
   .form-grid,
   .metrics-grid {
     grid-template-columns: 1fr;
+  }
+
+  .suggestion-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .suggestion-list button {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: 11px;
   }
 
   .coach-plan-banner { grid-template-columns: auto 1fr; }
