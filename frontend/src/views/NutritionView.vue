@@ -65,6 +65,31 @@
         </article>
       </section>
 
+      <section class="calorie-goal-card" aria-labelledby="calorie-goal-heading">
+        <div class="goal-copy">
+          <p class="eyebrow">DAILY GOAL</p>
+          <h2 id="calorie-goal-heading">Calorie target</h2>
+          <p>{{ calorieGoalMessage }}</p>
+        </div>
+        <div class="goal-stats">
+          <strong>{{ totalCalories.toLocaleString('en-AU') }}</strong>
+          <span>of {{ dailyCalorieGoal.toLocaleString('en-AU') }} kcal</span>
+        </div>
+        <div
+          class="goal-progress"
+          role="progressbar"
+          :aria-label="`${calorieGoalProgress}% of daily calorie target`"
+          :aria-valuenow="calorieGoalProgress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
+          <span :style="{ width: `${calorieGoalProgress}%` }"></span>
+        </div>
+        <p class="goal-note">
+          Includes {{ savedFoodsToday.length }} saved and {{ foods.length }} pending food{{ savedFoodsToday.length + foods.length === 1 ? '' : 's' }} today.
+        </p>
+      </section>
+
       <!-- Add Food form. -->
       <section class="content-card">
         <div class="section-heading">
@@ -169,7 +194,7 @@
           </div>
 
           <span class="food-count">
-            {{ foods.length }} foods
+            {{ foods.length }} {{ foods.length === 1 ? 'food' : 'foods' }}
           </span>
         </div>
 
@@ -285,8 +310,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { signOut } from 'aws-amplify/auth'
-import { fetchAuthSession } from 'aws-amplify/auth'
+import { fetchAuthSession, getCurrentUser, signOut } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
@@ -310,12 +334,31 @@ const calories = ref('')
 const protein = ref('')
 const carbs = ref('')
 const fat = ref('')
+const dailyCalorieGoal = ref(2000)
 
 // Store food records added to today's meals.
 const foods = ref([])
 
 // Store nutrition records loaded from the backend.
 const nutritionHistory = ref([])
+
+const toLocalDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+const today = computed(() => toLocalDate(new Date()))
+
+const savedFoodsToday = computed(() =>
+  nutritionHistory.value
+    .filter((record) => record.date === today.value)
+    .flatMap((record) => record.foods ?? []),
+)
+
+const todaysFoods = computed(() => [...savedFoodsToday.value, ...foods.value])
 
 const recentFoodPresets = computed(() => {
   const seen = new Set()
@@ -348,28 +391,57 @@ const chooseFood = (preset) => {
 
 // Calculate the total nutrition values from today's food records.
 const totalCalories = computed(() => {
-  return foods.value.reduce((total, food) => {
+  return todaysFoods.value.reduce((total, food) => {
     return total + Number(food.calories)
   }, 0)
 })
 
 const totalProtein = computed(() => {
-  return foods.value.reduce((total, food) => {
+  return todaysFoods.value.reduce((total, food) => {
     return total + Number(food.protein)
   }, 0)
 })
 
 const totalCarbs = computed(() => {
-  return foods.value.reduce((total, food) => {
+  return todaysFoods.value.reduce((total, food) => {
     return total + Number(food.carbs)
   }, 0)
 })
 
 const totalFat = computed(() => {
-  return foods.value.reduce((total, food) => {
+  return todaysFoods.value.reduce((total, food) => {
     return total + Number(food.fat)
   }, 0)
 })
+
+const calorieGoalProgress = computed(() =>
+  Math.min(100, Math.round((totalCalories.value / dailyCalorieGoal.value) * 100)),
+)
+
+const calorieGoalMessage = computed(() => {
+  const difference = dailyCalorieGoal.value - totalCalories.value
+
+  if (difference > 0) return `${difference.toLocaleString('en-AU')} kcal remaining today`
+  if (difference < 0) return `${Math.abs(difference).toLocaleString('en-AU')} kcal above your target`
+  return 'Daily target reached'
+})
+
+const loadCalorieGoal = async () => {
+  try {
+    const user = await getCurrentUser()
+    const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
+
+    if (!savedProfile) return
+
+    const savedGoal = Number(JSON.parse(savedProfile).dailyCalorieGoal)
+
+    if (Number.isFinite(savedGoal) && savedGoal >= 500 && savedGoal <= 10000) {
+      dailyCalorieGoal.value = savedGoal
+    }
+  } catch {
+    dailyCalorieGoal.value = 2000
+  }
+}
 
 // Store validation error messages.
 const formError = ref('')
@@ -448,13 +520,14 @@ const loadNutrition = async () => {
 
   // Store the returned nutrition records for use on the page.
   if (response.ok) {
-    nutritionHistory.value = result.nutrition
+    nutritionHistory.value = Array.isArray(result) ? result : (result.nutrition ?? [])
   }
 }
 
 // Load saved nutrition records when the Nutrition page opens.
 onMounted(() => {
   loadNutrition()
+  loadCalorieGoal()
 })
 
 const saveNutrition = async () => {
@@ -463,7 +536,7 @@ const saveNutrition = async () => {
   const idToken = session.tokens?.idToken?.toString()
 
   const nutritionData = {
-    date: new Date().toISOString().split('T')[0],
+    date: toLocalDate(new Date()),
     foods: foods.value,
   }
 
@@ -737,6 +810,70 @@ const deleteNutrition = async (nutritionId) => {
 
 .pink-card {
   background: #f6dfe7;
+}
+
+.calorie-goal-card {
+  margin-bottom: 24px;
+  padding: 24px 26px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px 28px;
+  border: 1px solid #d7e4d9;
+  border-radius: 20px;
+  background: linear-gradient(120deg, #e3f0e7, #f4f8df);
+}
+
+.goal-copy h2 {
+  margin: 5px 0 6px;
+  font-size: 1.45rem;
+}
+
+.goal-copy > p:last-child {
+  margin: 0;
+  color: #52655e;
+  font-size: 1rem;
+}
+
+.goal-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.goal-stats strong {
+  color: #173f34;
+  font-size: 2rem;
+}
+
+.goal-stats span {
+  color: #607069;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.goal-progress {
+  grid-column: 1 / -1;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(23, 63, 52, 0.1);
+}
+
+.goal-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #86ae3d, #cbed63);
+  transition: width 0.35s ease;
+}
+
+.goal-note {
+  grid-column: 1 / -1;
+  margin: -7px 0 0;
+  color: #68766f;
+  font-size: 0.84rem;
 }
 
 /* Content cards */
@@ -1065,6 +1202,16 @@ const deleteNutrition = async (nutritionId) => {
 
   .main-content {
     padding: 24px 16px 40px;
+  }
+
+  .calorie-goal-card {
+    grid-template-columns: 1fr;
+  }
+
+  .goal-stats,
+  .goal-progress,
+  .goal-note {
+    grid-column: 1;
   }
 
   .suggestion-heading,
