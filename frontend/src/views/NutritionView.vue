@@ -235,10 +235,10 @@
 
         <button
           class="save-btn"
-          :disabled="foods.length === 0"
+          :disabled="foods.length === 0 || isSaving"
           @click="saveNutrition"
         >
-          Save Nutrition
+          {{ isSaving ? 'Saving…' : 'Save Nutrition' }}
         </button>
 
         <p v-if="saveMessage" class="save-message">
@@ -259,8 +259,18 @@
           </span>
         </div>
 
+        <div v-if="isLoadingHistory" class="empty-state" aria-live="polite">
+          <div class="history-spinner"></div>
+          <p>Loading nutrition history...</p>
+        </div>
+
+        <div v-else-if="historyError" class="history-error" role="alert">
+          <p>{{ historyError }}</p>
+          <button type="button" @click="loadNutrition">Try again</button>
+        </div>
+
         <!-- Show this message when the user has no saved nutrition records. -->
-        <div v-if="nutritionHistory.length === 0" class="empty-state">
+        <div v-else-if="nutritionHistory.length === 0" class="empty-state">
           <p>No nutrition history yet.</p>
           <span>Saved nutrition records will appear here.</span>
         </div>
@@ -279,9 +289,36 @@
               <button
                 type="button"
                 class="delete-history-button"
-                @click="deleteNutrition(record.nutritionId)"
+                :disabled="Boolean(deletingNutritionId)"
+                @click="nutritionPendingDelete = record.nutritionId"
               >
                 Delete
+              </button>
+            </div>
+
+            <div
+              v-if="nutritionPendingDelete === record.nutritionId"
+              class="delete-confirmation"
+              role="alert"
+            >
+              <p>
+                <strong>Delete this nutrition record?</strong>
+                <span>This cannot be undone.</span>
+              </p>
+              <button
+                type="button"
+                :disabled="Boolean(deletingNutritionId)"
+                @click="nutritionPendingDelete = ''"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="confirm-delete-button"
+                :disabled="Boolean(deletingNutritionId)"
+                @click="deleteNutrition(record.nutritionId)"
+              >
+                {{ deletingNutritionId === record.nutritionId ? 'Deleting…' : 'Delete' }}
               </button>
             </div>
 
@@ -448,6 +485,11 @@ const formError = ref('')
 
 // Store the success message after saving nutrition data.
 const saveMessage = ref('')
+const isLoadingHistory = ref(true)
+const historyError = ref('')
+const isSaving = ref(false)
+const deletingNutritionId = ref('')
+const nutritionPendingDelete = ref('')
 
 // Sign the current user out and return to the login page.
 const handleLogout = async () => {
@@ -496,31 +538,33 @@ const removeFood = (index) => {
 
 // Load the current user's saved nutrition records from AWS.
 const loadNutrition = async () => {
-  // Get the current user's Cognito session.
-  const session = await fetchAuthSession()
+  isLoadingHistory.value = true
+  historyError.value = ''
 
-  // Get the ID token used to prove the user's identity to API Gateway.
-  const idToken = session.tokens?.idToken?.toString()
+  try {
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
 
-  // Send a GET request to retrieve this user's nutrition records.
-  const response = await fetch(
-    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
-    {
-      method: 'GET',
+    if (!idToken) throw new Error('Your session has expired. Please sign in again.')
 
-      // Send the Cognito token so the JWT Authorizer can identify the user.
-      headers: {
-        Authorization: idToken,
+    const response = await fetch(
+      'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+      {
+        method: 'GET',
+        headers: { Authorization: idToken },
       },
+    )
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.message || 'Your nutrition history could not be loaded.')
     }
-  )
 
-  // Convert the JSON response into a JavaScript object.
-  const result = await response.json()
-
-  // Store the returned nutrition records for use on the page.
-  if (response.ok) {
     nutritionHistory.value = Array.isArray(result) ? result : (result.nutrition ?? [])
+  } catch (error) {
+    historyError.value = error.message || 'Your nutrition history could not be loaded.'
+  } finally {
+    isLoadingHistory.value = false
   }
 }
 
@@ -531,66 +575,82 @@ onMounted(() => {
 })
 
 const saveNutrition = async () => {
-  const session = await fetchAuthSession()
+  if (isSaving.value || foods.value.length === 0) return
 
-  const idToken = session.tokens?.idToken?.toString()
+  isSaving.value = true
+  formError.value = ''
+  saveMessage.value = ''
 
-  const nutritionData = {
-    date: toLocalDate(new Date()),
-    foods: foods.value,
-  }
+  try {
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
 
-  const response = await fetch(
-    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
-    {
-      method: 'POST',
+    if (!idToken) throw new Error('Your session has expired. Please sign in again.')
 
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: idToken,
+    const response = await fetch(
+      'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: idToken,
+        },
+        body: JSON.stringify({
+          date: toLocalDate(new Date()),
+          foods: foods.value,
+        }),
       },
+    )
+    const result = await response.json()
 
-      body: JSON.stringify(nutritionData),
+    if (!response.ok) {
+      throw new Error(result.message || 'Your nutrition could not be saved.')
     }
-  )
 
-  // Consume the API response before refreshing the saved history.
-  await response.json()
-
-  // Clear today's meal list and show a message after a successful save.
-  if (response.ok) {
     saveMessage.value = 'Nutrition saved successfully!'
     foods.value = []
-
-    // Reload nutrition history so the newly saved record appears immediately.
     await loadNutrition()
+  } catch (error) {
+    formError.value = error.message || 'Your nutrition could not be saved.'
+  } finally {
+    isSaving.value = false
   }
 }
 
 // Delete one saved nutrition record from AWS.
 const deleteNutrition = async (nutritionId) => {
-  // Get the current user's Cognito session.
-  const session = await fetchAuthSession()
+  if (!nutritionId || deletingNutritionId.value) return
 
-  // Get the ID token used by API Gateway to verify the user.
-  const idToken = session.tokens?.idToken?.toString()
+  deletingNutritionId.value = nutritionId
+  historyError.value = ''
+  saveMessage.value = ''
 
-  // Send a DELETE request for the selected nutrition record.
-  const response = await fetch(
-    `https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition/${nutritionId}`,
-    {
-      method: 'DELETE',
+  try {
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
 
-      // Send the Cognito token so the JWT Authorizer can identify the user.
-      headers: {
-        Authorization: idToken,
+    if (!idToken) throw new Error('Your session has expired. Please sign in again.')
+
+    const response = await fetch(
+      `https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition/${encodeURIComponent(nutritionId)}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: idToken },
       },
-    }
-  )
+    )
 
-  // Reload nutrition history after the record is successfully deleted.
-  if (response.ok) {
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}))
+      throw new Error(result.message || 'The nutrition record could not be deleted.')
+    }
+
+    nutritionPendingDelete.value = ''
+    saveMessage.value = 'Nutrition record deleted successfully.'
     await loadNutrition()
+  } catch (error) {
+    historyError.value = error.message || 'The nutrition record could not be deleted.'
+  } finally {
+    deletingNutritionId.value = ''
   }
 }
 </script>
@@ -1165,6 +1225,93 @@ const deleteNutrition = async (nutritionId) => {
   font-size: 0.95rem;
 }
 
+.delete-history-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.delete-confirmation {
+  margin: 0 0 12px;
+  padding: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 11px;
+  background: #fff0ed;
+}
+
+.delete-confirmation p {
+  margin: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  color: #7e322b;
+  font-size: 0.92rem;
+}
+
+.delete-confirmation p span {
+  margin-top: 2px;
+  color: #985f58;
+}
+
+.delete-confirmation button {
+  padding: 8px 11px;
+  border: 1px solid #d8c2be;
+  border-radius: 9px;
+  background: white;
+  color: #5b4c49;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.delete-confirmation .confirm-delete-button {
+  border-color: #a33b31;
+  background: #a33b31;
+  color: white;
+}
+
+.delete-confirmation button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.history-error {
+  margin: 16px 0;
+  padding: 14px;
+  border-radius: 11px;
+  background: #fff1f0;
+  color: #8f2e25;
+}
+
+.history-error p {
+  margin: 0 0 10px;
+}
+
+.history-error button {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #8f2e25;
+  color: white;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.history-spinner {
+  width: 30px;
+  height: 30px;
+  border: 4px solid #dfe8e2;
+  border-top-color: #79a337;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Responsive layout */
 @media (max-width: 1000px) {
   .nutrition-summary {
@@ -1225,6 +1372,15 @@ const deleteNutrition = async (nutritionId) => {
     width: 100%;
     justify-content: space-between;
     border-radius: 11px;
+  }
+
+  .delete-confirmation {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .delete-confirmation p {
+    width: 100%;
   }
 }
 </style>
