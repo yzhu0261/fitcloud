@@ -1,7 +1,12 @@
 <script setup>
-import { nextTick, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { requestCoachReply } from '../services/aiCoach'
+import {
+  clearCoachConversation,
+  loadCoachConversation,
+  saveCoachConversation,
+} from '../services/coachConversation'
 import { parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
 
 const isOpen = ref(false)
@@ -21,6 +26,11 @@ const quickPrompts = [
   'Summarise my last 7 days.',
   'Create my weekly plan.',
 ]
+
+const welcomeMessage = {
+  role: 'assistant',
+  content: 'Hi! Ask me a quick question, or open the full coach for a detailed plan.',
+}
 
 const scrollToLatest = async () => {
   await nextTick()
@@ -55,6 +65,7 @@ const sendMessage = async (suggestedMessage) => {
   messageInput.value = ''
   const conversation = messages.value.slice(1)
   messages.value.push({ role: 'user', content: message })
+  await saveCoachConversation(messages.value.slice(1))
   isSending.value = true
   await scrollToLatest()
 
@@ -65,6 +76,7 @@ const sendMessage = async (suggestedMessage) => {
       content: reply,
       isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
     })
+    await saveCoachConversation(messages.value.slice(1))
   } catch (error) {
     chatError.value = error.message || 'The AI Coach could not respond.'
   } finally {
@@ -72,6 +84,21 @@ const sendMessage = async (suggestedMessage) => {
     await scrollToLatest()
   }
 }
+
+const clearConversation = async () => {
+  messages.value = [{ ...welcomeMessage }]
+  chatError.value = ''
+  planNotice.value = ''
+  await clearCoachConversation()
+}
+
+onMounted(async () => {
+  const savedMessages = await loadCoachConversation()
+
+  if (savedMessages.length) {
+    messages.value = [{ ...welcomeMessage }, ...savedMessages]
+  }
+})
 </script>
 
 <template>
@@ -83,7 +110,10 @@ const sendMessage = async (suggestedMessage) => {
             <span class="coach-avatar"><img src="/images/repvelta-coach-simple.png" alt="" /></span>
             <span><strong>RepVelta Coach</strong><small>AI fitness assistant</small></span>
           </div>
-          <button type="button" class="close-button" aria-label="Close AI Coach" @click="isOpen = false">×</button>
+          <div class="header-actions">
+            <button type="button" class="clear-button" @click="clearConversation">Clear</button>
+            <button type="button" class="close-button" aria-label="Close AI Coach" @click="isOpen = false">×</button>
+          </div>
         </header>
 
         <div ref="messageList" class="widget-messages" aria-live="polite">
@@ -139,6 +169,8 @@ const sendMessage = async (suggestedMessage) => {
 .coach-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 22px; border-bottom: 1px solid #e6ece8; background: #173f34; color: #fff; }
 .coach-identity { display: flex; align-items: center; gap: 11px; }.coach-identity > span:last-child { display: flex; flex-direction: column; gap: 2px; }
 .coach-identity strong { font-size: 1.08rem; }.coach-identity small { color: #dce9e3; font-size: .9rem; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.clear-button { padding: 8px 11px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px; background: transparent; color: #fff; font-size: .82rem; font-weight: 750; cursor: pointer; }
 .close-button { width: 38px; height: 38px; border: 0; border-radius: 50%; background: rgba(255,255,255,.1); color: #fff; font-size: 1.6rem; line-height: 1; cursor: pointer; }
 .widget-messages { flex: 1; min-height: 0; padding: 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 .widget-message { display: flex; align-items: flex-start; gap: 9px; }.widget-message.user { flex-direction: row-reverse; }

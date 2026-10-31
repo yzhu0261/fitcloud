@@ -5,6 +5,11 @@ import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import { requestCoachReply } from '../services/aiCoach'
+import {
+  clearCoachConversation,
+  loadCoachConversation,
+  saveCoachConversation,
+} from '../services/coachConversation'
 import { loadWeeklyPlan, parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
 
 const messageInput = ref('')
@@ -28,6 +33,12 @@ const suggestions = [
   'How has my training been recently?',
   'Review my recent nutrition records.',
 ]
+
+const welcomeMessage = {
+  role: 'assistant',
+  content:
+    'Hi, I’m your RepVelta AI Coach. Ask me about your recent activity or let me create a goal-aware weekly plan.',
+}
 
 const scrollToLatest = async () => {
   await nextTick()
@@ -57,6 +68,7 @@ const sendMessage = async (suggestedMessage) => {
   messageInput.value = ''
   const conversation = messages.value.slice(1)
   messages.value.push({ role: 'user', content: message })
+  await saveCoachConversation(messages.value.slice(1))
   isSending.value = true
   await scrollToLatest()
 
@@ -67,6 +79,7 @@ const sendMessage = async (suggestedMessage) => {
       content: reply,
       isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
     })
+    await saveCoachConversation(messages.value.slice(1))
   } catch (error) {
     chatError.value = error.message || 'The AI Coach could not respond.'
   } finally {
@@ -75,7 +88,20 @@ const sendMessage = async (suggestedMessage) => {
   }
 }
 
+const clearConversation = async () => {
+  messages.value = [{ ...welcomeMessage }]
+  chatError.value = ''
+  planNotice.value = ''
+  await clearCoachConversation()
+}
+
 onMounted(async () => {
+  const savedMessages = await loadCoachConversation()
+
+  if (savedMessages.length) {
+    messages.value = [{ ...welcomeMessage }, ...savedMessages]
+  }
+
   savedPlan.value = await loadWeeklyPlan()
 })
 </script>
@@ -107,6 +133,10 @@ onMounted(async () => {
 
       <section class="coach-layout">
         <article class="chat-card">
+          <div class="chat-toolbar">
+            <span>Conversation is saved on this device</span>
+            <button type="button" @click="clearConversation">Clear conversation</button>
+          </div>
           <div ref="messageList" class="message-list" aria-live="polite">
             <div v-for="(message, index) in messages" :key="index" :class="['message-row', message.role]">
               <div class="message-avatar">
@@ -190,6 +220,8 @@ onMounted(async () => {
 .coach-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; align-items: start; }
 .chat-card, .coach-info { border: 1px solid #e2e7e4; border-radius: 20px; background: #fffefd; }
 .chat-card { overflow: hidden; }
+.chat-toolbar { min-height: 48px; padding: 10px 22px; border-bottom: 1px solid #e8ece9; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: #f8faf8; color: #65716d; font-size: .88rem; }
+.chat-toolbar button { padding: 7px 10px; border: 1px solid #d6e2da; border-radius: 999px; background: #fff; color: #315e51; font: inherit; font-weight: 750; cursor: pointer; }
 .message-list { height: 500px; padding: 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
 .message-row { display: flex; align-items: flex-start; gap: 12px; }
 .message-row.user { flex-direction: row-reverse; }
@@ -224,5 +256,5 @@ onMounted(async () => {
 @keyframes pulse { 50% { opacity: .35; } }
 @media (max-width: 1050px) { .coach-layout { grid-template-columns: 1fr; } .coach-info { order: -1; } }
 @media (max-width: 1000px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } }
-@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .message-list { height: 440px; padding: 20px 16px; } .message-row p { max-width: 84%; } .composer { grid-template-columns: 1fr; padding: 16px; } .composer button { width: 100%; } .suggestions { padding: 0 16px 16px; } }
+@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .chat-toolbar span { display: none; } .chat-toolbar { justify-content: flex-end; } .message-list { height: 440px; padding: 20px 16px; } .message-row p { max-width: 84%; } .composer { grid-template-columns: 1fr; padding: 16px; } .composer button { width: 100%; } .suggestions { padding: 0 16px 16px; } }
 </style>
