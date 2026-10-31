@@ -53,12 +53,13 @@ const sendMessage = async (suggestedMessage) => {
 
   chatError.value = ''
   messageInput.value = ''
+  const conversation = messages.value.slice(1)
   messages.value.push({ role: 'user', content: message })
   isSending.value = true
   await scrollToLatest()
 
   try {
-    const reply = await requestCoachReply(message)
+    const reply = await requestCoachReply(message, conversation)
     messages.value.push({
       role: 'assistant',
       content: reply,

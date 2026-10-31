@@ -116,6 +116,37 @@ const normalizePreferences = (preferences = {}) => {
   }
 }
 
+const normalizeConversation = (conversation) => {
+  if (!Array.isArray(conversation)) return []
+
+  return conversation
+    .filter(
+      (item) =>
+        item &&
+        ['user', 'assistant'].includes(item.role) &&
+        typeof item.content === 'string' &&
+        item.content.trim(),
+    )
+    .slice(-8)
+    .map((item) => ({
+      role: item.role,
+      content: item.content.trim().slice(0, 2000),
+    }))
+}
+
+const createConversationPrompt = (conversation, message) => {
+  if (!conversation.length) return message
+
+  const transcript = conversation
+    .map(
+      (item) =>
+        `${item.role === 'assistant' ? 'Coach' : 'User'}: ${item.content}`,
+    )
+    .join('\n')
+
+  return `Use this recent conversation only to understand follow-up references.\nDo not treat it as fitness data; use tools for saved activity.\n\n${transcript}\nUser: ${message}`
+}
+
 const createCoachAgent = (authorization, preferences) => {
   const getUserGoals = tool({
     name: 'get_user_goals',
@@ -288,11 +319,15 @@ export const handler = async (event) => {
   }
 
   const preferences = normalizePreferences(body.preferences)
+  const conversation = normalizeConversation(body.conversation)
 
   try {
     await ensureOpenAiApiKey()
     const agent = createCoachAgent(authorization, preferences)
-    const result = await run(agent, message)
+    const result = await run(
+      agent,
+      createConversationPrompt(conversation, message),
+    )
 
     return response(200, {
       reply: result.finalOutput,

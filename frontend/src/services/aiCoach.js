@@ -32,7 +32,21 @@ const getCoachPreferences = async () => {
   }
 }
 
-export const requestCoachReply = async (message) => {
+const getConversationContext = (messages = []) =>
+  messages
+    .filter(
+      (item) =>
+        ['user', 'assistant'].includes(item?.role) &&
+        typeof item?.content === 'string' &&
+        item.content.trim(),
+    )
+    .slice(-8)
+    .map((item) => ({
+      role: item.role,
+      content: item.content.trim().slice(0, 2000),
+    }))
+
+export const requestCoachReply = async (message, messages = []) => {
   if (!apiUrl) {
     throw new Error(
       'AI Coach is not connected yet. Add VITE_AI_COACH_API_URL to the frontend environment after the Lambda API is deployed.',
@@ -53,7 +67,11 @@ export const requestCoachReply = async (message) => {
       Authorization: `Bearer ${idToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ message, preferences }),
+    body: JSON.stringify({
+      message,
+      preferences,
+      conversation: getConversationContext(messages),
+    }),
   })
   const result = await response.json()
 
