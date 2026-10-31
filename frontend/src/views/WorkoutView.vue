@@ -56,6 +56,9 @@ const isLoadingHistory = ref(true)
 const historyError = ref('')
 const deletingWorkoutId = ref('')
 const workoutPendingDelete = ref('')
+const editingWorkoutId = ref('')
+const editWorkoutDraft = ref(null)
+const isUpdatingWorkout = ref(false)
 const todayPlan = ref(null)
 const isPlanWorkout = computed(() => route.query.fromPlan === '1' && Boolean(todayPlan.value))
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
@@ -259,6 +262,79 @@ const deleteWorkout = async (workoutId) => {
     historyError.value = error.message || 'The workout could not be deleted.'
   } finally {
     deletingWorkoutId.value = ''
+  }
+}
+
+const startEditingWorkout = (workout) => {
+  editingWorkoutId.value = workout.workoutId
+  editWorkoutDraft.value = {
+    date: workout.date,
+    exercises: (workout.exercises ?? []).map((item) => ({ ...item })),
+  }
+  workoutPendingDelete.value = ''
+  historyError.value = ''
+}
+
+const cancelEditingWorkout = () => {
+  editingWorkoutId.value = ''
+  editWorkoutDraft.value = null
+}
+
+const addEditExercise = () => {
+  editWorkoutDraft.value.exercises.push({
+    muscleGroup: '',
+    exercise: '',
+    sets: 3,
+    reps: 10,
+    weight: 0,
+  })
+}
+
+const updateWorkout = async () => {
+  if (!editingWorkoutId.value || isUpdatingWorkout.value) return
+
+  historyError.value = ''
+  saveNotice.value = ''
+
+  if (!editWorkoutDraft.value.date || editWorkoutDraft.value.exercises.length === 0) {
+    historyError.value = 'A workout needs a date and at least one exercise.'
+    return
+  }
+
+  isUpdatingWorkout.value = true
+
+  try {
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
+
+    if (!idToken) throw new Error('Your session has expired. Please sign in again.')
+
+    const response = await fetch(`${API_URL}/workouts`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        workoutId: editingWorkoutId.value,
+        ...editWorkoutDraft.value,
+      }),
+    })
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.message || 'The workout could not be updated.')
+    }
+
+    workouts.value = workouts.value.map((workout) =>
+      workout.workoutId === editingWorkoutId.value ? result : workout,
+    )
+    cancelEditingWorkout()
+    saveNotice.value = 'Workout updated successfully.'
+  } catch (error) {
+    historyError.value = error.message || 'The workout could not be updated.'
+  } finally {
+    isUpdatingWorkout.value = false
   }
 }
 
@@ -587,35 +663,59 @@ onMounted(() => {
               <div class="history-date">
                 {{ workout.date }}
               </div>
-              <button
-                v-if="workoutPendingDelete !== workout.workoutId"
-                type="button"
-                class="delete-workout-button"
-                @click="workoutPendingDelete = workout.workoutId"
-              >
-                Delete
-              </button>
-            </div>
-
-            <div
-              v-for="(item, index) in workout.exercises"
-              :key="index"
-              class="history-exercise"
-            >
-              <div>
-                <h3>{{ item.exercise }}</h3>
-
-                <p>
-                  {{ item.sets }} sets ×
-                  {{ item.reps }} reps ·
-                  {{ item.weight }} kg
-                </p>
+              <div v-if="editingWorkoutId !== workout.workoutId" class="history-actions">
+                <button type="button" class="edit-workout-button" @click="startEditingWorkout(workout)">Edit</button>
+                <button
+                  v-if="workoutPendingDelete !== workout.workoutId"
+                  type="button"
+                  class="delete-workout-button"
+                  @click="workoutPendingDelete = workout.workoutId"
+                >
+                  Delete
+                </button>
               </div>
-
-              <span class="muscle-badge">
-                {{ item.muscleGroup }}
-              </span>
             </div>
+
+            <div v-if="editingWorkoutId === workout.workoutId" class="edit-workout-form">
+              <label>
+                <span>Workout date</span>
+                <input v-model="editWorkoutDraft.date" type="date" />
+              </label>
+              <div v-for="(item, index) in editWorkoutDraft.exercises" :key="index" class="edit-exercise-grid">
+                <select v-model="item.muscleGroup" aria-label="Muscle group">
+                  <option value="" disabled>Muscle group</option>
+                  <option value="chest">Chest</option><option value="back">Back</option>
+                  <option value="legs">Legs</option><option value="shoulders">Shoulders</option>
+                  <option value="arms">Arms</option><option value="core">Core</option>
+                </select>
+                <input v-model="item.exercise" type="text" aria-label="Exercise name" placeholder="Exercise" />
+                <input v-model.number="item.sets" type="number" min="1" aria-label="Sets" placeholder="Sets" />
+                <input v-model.number="item.reps" type="number" min="1" aria-label="Reps" placeholder="Reps" />
+                <input v-model.number="item.weight" type="number" min="0" step="0.5" aria-label="Weight" placeholder="kg" />
+                <button type="button" class="remove-edit-exercise" @click="editWorkoutDraft.exercises.splice(index, 1)">Remove</button>
+              </div>
+              <button type="button" class="add-edit-exercise" @click="addEditExercise">+ Add exercise</button>
+              <div class="edit-form-actions">
+                <button type="button" :disabled="isUpdatingWorkout" @click="cancelEditingWorkout">Cancel</button>
+                <button type="button" class="save-edit-button" :disabled="isUpdatingWorkout" @click="updateWorkout">
+                  {{ isUpdatingWorkout ? 'Saving…' : 'Save changes' }}
+                </button>
+              </div>
+            </div>
+
+            <template v-else>
+              <div
+                v-for="(item, index) in workout.exercises"
+                :key="index"
+                class="history-exercise"
+              >
+                <div>
+                  <h3>{{ item.exercise }}</h3>
+                  <p>{{ item.sets }} sets × {{ item.reps }} reps · {{ item.weight }} kg</p>
+                </div>
+                <span class="muscle-badge">{{ item.muscleGroup }}</span>
+              </div>
+            </template>
 
             <div
               v-if="workoutPendingDelete === workout.workoutId"
@@ -1197,6 +1297,8 @@ onMounted(() => {
 }
 
 .history-item-heading { min-height: 34px; margin-bottom: 7px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.history-actions { display: flex; align-items: center; gap: 7px; }
+.edit-workout-button { padding: 7px 10px; border: 1px solid #bfd0c5; border-radius: 9px; background: #fff; color: #315e51; font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; }
 .delete-workout-button { padding: 7px 10px; border: 1px solid #e3c2bd; border-radius: 9px; background: #fff; color: #a43a30; font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; }
 .delete-workout-button:hover { background: #fff2ef; }
 .delete-confirmation { margin-top: 10px; padding: 13px; display: flex; align-items: center; gap: 8px; border-radius: 11px; background: #fff0ed; }
@@ -1209,6 +1311,16 @@ onMounted(() => {
 .history-error p { margin: 0 0 10px; }
 .history-error button { padding: 8px 12px; border: 0; border-radius: 8px; background: #8f2e25; color: white; font: inherit; font-weight: 750; cursor: pointer; }
 .history-spinner { width: 30px; height: 30px; border: 4px solid #dfe8e2; border-top-color: #79a337; border-radius: 50%; animation: spin .8s linear infinite; }
+.edit-workout-form { margin: 10px 0 5px; padding: 16px; border: 1px solid #cfddd4; border-radius: 14px; background: #f6faf7; }
+.edit-workout-form label { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; color: #315e51; font-size: .9rem; font-weight: 750; }
+.edit-workout-form input, .edit-workout-form select { min-width: 0; min-height: 42px; padding: 9px 10px; border: 1px solid #d6dfd9; border-radius: 9px; background: #fff; color: #172033; font: inherit; }
+.edit-exercise-grid { display: grid; grid-template-columns: 1.1fr 1.6fr .65fr .65fr .75fr auto; gap: 7px; margin-top: 8px; }
+.remove-edit-exercise { border: 0; background: transparent; color: #a43a30; font: inherit; font-size: .84rem; font-weight: 750; cursor: pointer; }
+.add-edit-exercise { margin-top: 12px; padding: 8px 11px; border: 1px dashed #9fb5a7; border-radius: 9px; background: #fff; color: #315e51; font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; }
+.edit-form-actions { margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px; }
+.edit-form-actions button { padding: 9px 13px; border: 1px solid #cfd9d2; border-radius: 9px; background: #fff; color: #52615d; font: inherit; font-weight: 750; cursor: pointer; }
+.edit-form-actions .save-edit-button { border-color: #cbed63; background: #cbed63; color: #17352c; }
+.edit-form-actions button:disabled { opacity: .55; cursor: wait; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .history-exercise {
@@ -1286,5 +1398,7 @@ onMounted(() => {
 
   .coach-plan-banner { grid-template-columns: auto 1fr; }
   .coach-plan-banner a { grid-column: 1 / -1; text-align: center; }
+  .edit-exercise-grid { grid-template-columns: 1fr 1fr; }
+  .edit-exercise-grid input[aria-label="Exercise name"] { grid-column: 1 / -1; }
 }
 </style>
