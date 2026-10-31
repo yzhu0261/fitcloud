@@ -20,6 +20,9 @@ const normalizeMessages = (messages) => {
       role: message.role,
       content: message.content.trim().slice(0, 4000),
       isWeeklyPlan: message.isWeeklyPlan === true,
+      feedback: ['helpful', 'not-helpful'].includes(message.feedback)
+        ? message.feedback
+        : undefined,
     }))
 }
 

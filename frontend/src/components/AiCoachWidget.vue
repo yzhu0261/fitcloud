@@ -11,6 +11,7 @@ import { parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
 
 const isOpen = ref(false)
 const isSending = ref(false)
+const regeneratingIndex = ref(-1)
 const messageInput = ref('')
 const chatError = ref('')
 const messageList = ref(null)
@@ -92,6 +93,42 @@ const clearConversation = async () => {
   await clearCoachConversation()
 }
 
+const setFeedback = async (index, feedback) => {
+  messages.value[index].feedback =
+    messages.value[index].feedback === feedback ? undefined : feedback
+  await saveCoachConversation(messages.value.slice(1))
+}
+
+const regenerateResponse = async (assistantIndex) => {
+  if (isSending.value || regeneratingIndex.value >= 0) return
+
+  const userIndex = messages.value
+    .slice(0, assistantIndex)
+    .findLastIndex((message) => message.role === 'user')
+
+  if (userIndex < 0) return
+
+  chatError.value = ''
+  regeneratingIndex.value = assistantIndex
+
+  try {
+    const reply = await requestCoachReply(
+      messages.value[userIndex].content,
+      messages.value.slice(1, userIndex),
+    )
+    messages.value[assistantIndex] = {
+      role: 'assistant',
+      content: reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+    }
+    await saveCoachConversation(messages.value.slice(1))
+  } catch (error) {
+    chatError.value = error.message || 'The AI Coach could not regenerate this response.'
+  } finally {
+    regeneratingIndex.value = -1
+  }
+}
+
 onMounted(async () => {
   const savedMessages = await loadCoachConversation()
 
@@ -125,6 +162,13 @@ onMounted(async () => {
             <div class="widget-message-copy">
               <p>{{ message.content }}</p>
               <button v-if="message.isWeeklyPlan" type="button" class="widget-save-plan" @click="handleSavePlan(message.content)">Save plan</button>
+              <div v-if="message.role === 'assistant' && index > 0" class="message-actions" aria-label="Rate this response">
+                <button type="button" :class="{ selected: message.feedback === 'helpful' }" title="Helpful" @click="setFeedback(index, 'helpful')">Helpful</button>
+                <button type="button" :class="{ selected: message.feedback === 'not-helpful' }" title="Not helpful" @click="setFeedback(index, 'not-helpful')">Not helpful</button>
+                <button type="button" :disabled="regeneratingIndex >= 0" @click="regenerateResponse(index)">
+                  {{ regeneratingIndex === index ? 'Regenerating…' : 'Try again' }}
+                </button>
+              </div>
             </div>
           </div>
           <div v-if="isSending" class="widget-message assistant">
@@ -182,6 +226,10 @@ onMounted(async () => {
 .widget-message p { max-width: none; margin: 0; padding: 13px 15px; border-radius: 5px 14px 14px; background: #f0f5f1; font-size: 1rem; line-height: 1.55; white-space: pre-wrap; }
 .widget-message.user p { border-radius: 14px 5px 14px 14px; background: #e9f5ba; }
 .widget-save-plan { padding: 8px 11px; border: 0; border-radius: 9px; background: #cbed63; color: #17352c; font-size: .8rem; font-weight: 800; cursor: pointer; }
+.message-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.message-actions button { padding: 6px 9px; border: 1px solid #d7e2dc; border-radius: 999px; background: #fff; color: #52615d; font-size: .75rem; font-weight: 700; cursor: pointer; }
+.message-actions button.selected { border-color: #9eb94d; background: #edf7d0; color: #315e51; }
+.message-actions button:disabled { opacity: .55; cursor: wait; }
 .quick-prompts { padding: 0 20px 14px; display: flex; gap: 8px; overflow-x: auto; }
 .quick-prompts button { flex: 0 0 auto; padding: 9px 12px; border: 1px solid #d6e2da; border-radius: 999px; background: #fff; color: #315e51; font-size: .86rem; font-weight: 700; cursor: pointer; }
 .widget-error { margin: 0 16px 10px; padding: 10px 12px; border-radius: 10px; background: #fff2f0; color: #a52b20; font-size: .85rem; }
