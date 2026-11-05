@@ -44,6 +44,15 @@ const getConversationContext = (messages = []) =>
     .map((item) => ({
       role: item.role,
       content: item.content.trim().slice(0, 2000),
+      feedback:
+        item.role === 'assistant' &&
+        ['helpful', 'not-helpful'].includes(item.feedback)
+        ? item.feedback
+        : undefined,
+      feedbackNote:
+        item.role === 'assistant' && typeof item.feedbackNote === 'string'
+          ? item.feedbackNote.trim().slice(0, 300)
+          : undefined,
     }))
 
 export const requestCoachReply = async (message, messages = []) => {

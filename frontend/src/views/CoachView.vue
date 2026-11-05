@@ -19,6 +19,7 @@ const chatError = ref('')
 const messageList = ref(null)
 const savedPlan = ref(null)
 const planNotice = ref('')
+const feedbackDrafts = ref({})
 
 const messages = ref([
   {
@@ -97,9 +98,50 @@ const clearConversation = async () => {
 }
 
 const setFeedback = async (index, feedback) => {
-  messages.value[index].feedback =
-    messages.value[index].feedback === feedback ? undefined : feedback
+  const isRemoving = messages.value[index].feedback === feedback
+  messages.value[index].feedback = isRemoving ? undefined : feedback
+
+  if (feedback !== 'not-helpful' || isRemoving) {
+    messages.value[index].feedbackNote = undefined
+    delete feedbackDrafts.value[index]
+  }
+
   await saveCoachConversation(messages.value.slice(1))
+}
+
+const reviseFromFeedback = async (assistantIndex) => {
+  if (isSending.value || regeneratingIndex.value >= 0) return
+
+  const feedbackNote = String(feedbackDrafts.value[assistantIndex] || '').trim()
+  const message = feedbackNote
+    ? `Please revise your previous answer using this feedback: ${feedbackNote}`
+    : 'Please revise your previous answer. Make it more practical, specific, and clearly different.'
+
+  messages.value[assistantIndex].feedback = 'not-helpful'
+  messages.value[assistantIndex].feedbackNote = feedbackNote
+  await saveCoachConversation(messages.value.slice(1))
+  regeneratingIndex.value = assistantIndex
+  chatError.value = ''
+
+  try {
+    const reply = await requestCoachReply(
+      message,
+      messages.value.slice(1, assistantIndex + 1),
+    )
+    messages.value[assistantIndex] = {
+      role: 'assistant',
+      content: reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+      revisedFromFeedback: true,
+    }
+    delete feedbackDrafts.value[assistantIndex]
+    await saveCoachConversation(messages.value.slice(1))
+  } catch (error) {
+    chatError.value = error.message || 'The AI Coach could not revise this response.'
+  } finally {
+    regeneratingIndex.value = -1
+    await scrollToLatest()
+  }
 }
 
 const regenerateResponse = async (assistantIndex) => {
@@ -192,6 +234,24 @@ onMounted(async () => {
                     {{ regeneratingIndex === index ? 'Regenerating…' : 'Try again' }}
                   </button>
                 </div>
+                <form
+                  v-if="message.feedback === 'not-helpful'"
+                  class="feedback-revision"
+                  @submit.prevent="reviseFromFeedback(index)"
+                >
+                  <label :for="`feedback-${index}`">What should the coach change? <span>Optional</span></label>
+                  <div>
+                    <input
+                      :id="`feedback-${index}`"
+                      v-model="feedbackDrafts[index]"
+                      maxlength="300"
+                      placeholder="For example: fewer gym days, more detail, lower intensity…"
+                    />
+                    <button type="submit" :disabled="regeneratingIndex >= 0">
+                      {{ regeneratingIndex === index ? 'Revising…' : 'Revise answer' }}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
 
@@ -281,6 +341,13 @@ onMounted(async () => {
 .message-actions button { padding: 7px 10px; border: 1px solid #d7e2dc; border-radius: 999px; background: #fff; color: #52615d; font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
 .message-actions button.selected { border-color: #9eb94d; background: #edf7d0; color: #315e51; }
 .message-actions button:disabled { opacity: .55; cursor: wait; }
+.feedback-revision { width: min(620px, 100%); padding: 12px; border: 1px solid #d7e2dc; border-radius: 12px; background: #f7faf8; }
+.feedback-revision label { display: block; margin-bottom: 8px; color: #315e51; font-size: .84rem; font-weight: 800; }
+.feedback-revision label span { color: #7b8782; font-weight: 600; }
+.feedback-revision > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.feedback-revision input { min-width: 0; padding: 10px 11px; border: 1px solid #d5dfd9; border-radius: 9px; background: #fff; color: #172033; font: inherit; font-size: .88rem; }
+.feedback-revision button { padding: 9px 12px; border: 0; border-radius: 9px; background: #173f34; color: #fff; font: inherit; font-size: .84rem; font-weight: 800; cursor: pointer; }
+.feedback-revision button:disabled { opacity: .55; cursor: wait; }
 .typing span { display: inline-block; animation: pulse 1s ease-in-out infinite; }
 .suggestions { padding: 0 24px 18px; display: flex; flex-wrap: wrap; gap: 8px; }
 .suggestions button { padding: 9px 12px; border: 1px solid #d9e3dc; border-radius: 999px; background: #fff; color: #315e51; font-size: .9rem; font-weight: 650; cursor: pointer; }
@@ -304,5 +371,5 @@ onMounted(async () => {
 @keyframes pulse { 50% { opacity: .35; } }
 @media (max-width: 1050px) { .coach-layout { grid-template-columns: 1fr; } .coach-info { order: -1; } }
 @media (max-width: 1000px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } }
-@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .chat-toolbar span { display: none; } .chat-toolbar { justify-content: flex-end; } .message-list { height: 440px; padding: 20px 16px; } .message-row p { max-width: 84%; } .composer { grid-template-columns: 1fr; padding: 16px; } .composer button { width: 100%; } .suggestions { padding: 0 16px 16px; } }
+@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .chat-toolbar span { display: none; } .chat-toolbar { justify-content: flex-end; } .message-list { height: 440px; padding: 20px 16px; } .message-row p { max-width: 84%; } .feedback-revision > div { grid-template-columns: 1fr; } .composer { grid-template-columns: 1fr; padding: 16px; } .composer button { width: 100%; } .suggestions { padding: 0 16px 16px; } }
 </style>

@@ -131,6 +131,15 @@ const normalizeConversation = (conversation) => {
     .map((item) => ({
       role: item.role,
       content: item.content.trim().slice(0, 2000),
+      feedback:
+        item.role === 'assistant' &&
+        ['helpful', 'not-helpful'].includes(item.feedback)
+        ? item.feedback
+        : undefined,
+      feedbackNote:
+        item.role === 'assistant' && typeof item.feedbackNote === 'string'
+          ? item.feedbackNote.trim().slice(0, 300)
+          : undefined,
     }))
 }
 
@@ -138,10 +147,16 @@ const createConversationPrompt = (conversation, message) => {
   if (!conversation.length) return message
 
   const transcript = conversation
-    .map(
-      (item) =>
-        `${item.role === 'assistant' ? 'Coach' : 'User'}: ${item.content}`,
-    )
+    .map((item) => {
+      const speaker = item.role === 'assistant' ? 'Coach' : 'User'
+      const feedback = item.feedback
+        ? `\nUser feedback on this answer: ${item.feedback}${
+            item.feedbackNote ? ` — ${item.feedbackNote}` : ''
+          }`
+        : ''
+
+      return `${speaker}: ${item.content}${feedback}`
+    })
     .join('\n')
 
   return `Use this recent conversation only to understand follow-up references.\nDo not treat it as fitness data; use tools for saved activity.\n\n${transcript}\nUser: ${message}`
@@ -276,6 +291,10 @@ Read record dates and summary date ranges literally. An older saved record is no
 evidence that a seven-day summary is incomplete, and it does not conflict with a
 zero count for a later seven-day period.
 Be concise, practical, encouraging, and clear about uncertainty.
+Use explicit user feedback from the recent conversation. When an answer was
+marked not helpful, revise the substance instead of merely rephrasing it. Apply
+the user's feedback note, preserve useful parts, and clearly improve the plan.
+When an answer was marked helpful, preserve the useful level of detail and tone.
 Do not diagnose medical conditions or replace a doctor, physiotherapist, or dietitian.
 If the user describes pain, injury, disordered eating, or an emergency, recommend qualified professional help.
 This first version is read-only. Never claim that you changed, created, or deleted user data.

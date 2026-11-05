@@ -16,6 +16,7 @@ const messageInput = ref('')
 const chatError = ref('')
 const messageList = ref(null)
 const planNotice = ref('')
+const feedbackDrafts = ref({})
 const messages = ref([
   {
     role: 'assistant',
@@ -94,9 +95,50 @@ const clearConversation = async () => {
 }
 
 const setFeedback = async (index, feedback) => {
-  messages.value[index].feedback =
-    messages.value[index].feedback === feedback ? undefined : feedback
+  const isRemoving = messages.value[index].feedback === feedback
+  messages.value[index].feedback = isRemoving ? undefined : feedback
+
+  if (feedback !== 'not-helpful' || isRemoving) {
+    messages.value[index].feedbackNote = undefined
+    delete feedbackDrafts.value[index]
+  }
+
   await saveCoachConversation(messages.value.slice(1))
+}
+
+const reviseFromFeedback = async (assistantIndex) => {
+  if (isSending.value || regeneratingIndex.value >= 0) return
+
+  const feedbackNote = String(feedbackDrafts.value[assistantIndex] || '').trim()
+  const message = feedbackNote
+    ? `Please revise your previous answer using this feedback: ${feedbackNote}`
+    : 'Please revise your previous answer. Make it more practical, specific, and clearly different.'
+
+  messages.value[assistantIndex].feedback = 'not-helpful'
+  messages.value[assistantIndex].feedbackNote = feedbackNote
+  await saveCoachConversation(messages.value.slice(1))
+  regeneratingIndex.value = assistantIndex
+  chatError.value = ''
+
+  try {
+    const reply = await requestCoachReply(
+      message,
+      messages.value.slice(1, assistantIndex + 1),
+    )
+    messages.value[assistantIndex] = {
+      role: 'assistant',
+      content: reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+      revisedFromFeedback: true,
+    }
+    delete feedbackDrafts.value[assistantIndex]
+    await saveCoachConversation(messages.value.slice(1))
+  } catch (error) {
+    chatError.value = error.message || 'The AI Coach could not revise this response.'
+  } finally {
+    regeneratingIndex.value = -1
+    await scrollToLatest()
+  }
 }
 
 const regenerateResponse = async (assistantIndex) => {
@@ -169,6 +211,22 @@ onMounted(async () => {
                   {{ regeneratingIndex === index ? 'Regenerating…' : 'Try again' }}
                 </button>
               </div>
+              <form
+                v-if="message.feedback === 'not-helpful'"
+                class="feedback-revision"
+                @submit.prevent="reviseFromFeedback(index)"
+              >
+                <label :for="`widget-feedback-${index}`">What should change? <span>Optional</span></label>
+                <input
+                  :id="`widget-feedback-${index}`"
+                  v-model="feedbackDrafts[index]"
+                  maxlength="300"
+                  placeholder="Fewer days, more detail…"
+                />
+                <button type="submit" :disabled="regeneratingIndex >= 0">
+                  {{ regeneratingIndex === index ? 'Revising…' : 'Revise answer' }}
+                </button>
+              </form>
             </div>
           </div>
           <div v-if="isSending" class="widget-message assistant">
@@ -230,6 +288,10 @@ onMounted(async () => {
 .message-actions button { padding: 6px 9px; border: 1px solid #d7e2dc; border-radius: 999px; background: #fff; color: #52615d; font-size: .75rem; font-weight: 700; cursor: pointer; }
 .message-actions button.selected { border-color: #9eb94d; background: #edf7d0; color: #315e51; }
 .message-actions button:disabled { opacity: .55; cursor: wait; }
+.feedback-revision { width: 100%; padding: 10px; border: 1px solid #d7e2dc; border-radius: 11px; background: #f7faf8; display: grid; gap: 7px; }
+.feedback-revision label { color: #315e51; font-size: .78rem; font-weight: 800; }.feedback-revision label span { color: #7b8782; font-weight: 600; }
+.feedback-revision input { min-width: 0; padding: 9px 10px; border: 1px solid #d5dfd9; border-radius: 8px; color: #172033; font: inherit; font-size: .82rem; }
+.feedback-revision button { padding: 9px 10px; border: 0; border-radius: 8px; background: #173f34; color: #fff; font-size: .8rem; font-weight: 800; cursor: pointer; }.feedback-revision button:disabled { opacity: .55; cursor: wait; }
 .quick-prompts { padding: 0 20px 14px; display: flex; gap: 8px; overflow-x: auto; }
 .quick-prompts button { flex: 0 0 auto; padding: 9px 12px; border: 1px solid #d6e2da; border-radius: 999px; background: #fff; color: #315e51; font-size: .86rem; font-weight: 700; cursor: pointer; }
 .widget-error { margin: 0 16px 10px; padding: 10px 12px; border-radius: 10px; background: #fff2f0; color: #a52b20; font-size: .85rem; }

@@ -29,3 +29,7 @@ Thumbs.db
 # Logs
 *.log
 /key.txt
+
+# Local deployment and audit workspaces
+/.tmp_a3_audit_*/
+/tmp/
