@@ -15,6 +15,7 @@ const showPassword = ref(false)
 const router = useRouter()
 const route = useRoute()
 const registrationComplete = computed(() => route.query.verified === 'true')
+const passwordResetComplete = computed(() => route.query.reset === 'true')
 
 const handleLogin = async () => {
   emailError.value = ''
@@ -77,6 +78,9 @@ const handleLogin = async () => {
     <div v-if="registrationComplete" class="alert alert-success" role="status">
       Your email is verified. You can sign in now.
     </div>
+    <div v-if="passwordResetComplete" class="alert alert-success" role="status">
+      Your password has been updated. You can sign in now.
+    </div>
 
     <form class="auth-form" novalidate @submit.prevent="handleLogin">
       <div class="form-group">
@@ -96,7 +100,12 @@ const handleLogin = async () => {
       </div>
 
       <div class="form-group">
-        <label for="login-password">Password</label>
+        <div class="password-heading">
+          <label for="login-password">Password</label>
+          <RouterLink :to="{ path: '/forgot-password', query: email ? { email } : {} }">
+            Forgot password?
+          </RouterLink>
+        </div>
         <div class="input-wrap">
           <input
             id="login-password"
@@ -136,3 +145,9 @@ const handleLogin = async () => {
     </p>
   </AuthShell>
 </template>
+
+<style scoped>
+.password-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.password-heading a { color: #315e51; font-size: .98rem; font-weight: 750; text-decoration: none; }
+.password-heading a:hover { text-decoration: underline; }
+</style>
