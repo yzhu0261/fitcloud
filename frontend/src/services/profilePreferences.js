@@ -85,6 +85,37 @@ export const applyCurrentGoalUpdate = async (action) => {
 
   const user = await getCurrentUser()
   const currentProfile = loadProfilePreferences(user.username)
+  const previousGoals = {
+    weeklyWorkoutGoal: currentProfile.weeklyWorkoutGoal,
+    dailyCalorieGoal: currentProfile.dailyCalorieGoal,
+  }
+
+  const profile = saveProfilePreferences(user.username, {
+    ...currentProfile,
+    weeklyWorkoutGoal,
+    dailyCalorieGoal,
+  })
+
+  return { profile, previousGoals }
+}
+
+export const restoreCurrentGoalUpdate = async (previousGoals) => {
+  const weeklyWorkoutGoal = Number(previousGoals?.weeklyWorkoutGoal)
+  const dailyCalorieGoal = Number(previousGoals?.dailyCalorieGoal)
+
+  if (
+    !Number.isInteger(weeklyWorkoutGoal) ||
+    weeklyWorkoutGoal < 1 ||
+    weeklyWorkoutGoal > 14 ||
+    !Number.isInteger(dailyCalorieGoal) ||
+    dailyCalorieGoal < 500 ||
+    dailyCalorieGoal > 10000
+  ) {
+    throw new Error('The previous goals are no longer available.')
+  }
+
+  const user = await getCurrentUser()
+  const currentProfile = loadProfilePreferences(user.username)
 
   return saveProfilePreferences(user.username, {
     ...currentProfile,

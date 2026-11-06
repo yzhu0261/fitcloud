@@ -12,9 +12,26 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  canUndo: {
+    type: Boolean,
+    default: false,
+  },
+  updatedAt: {
+    type: String,
+    default: '',
+  },
 })
 
-defineEmits(['apply', 'discard'])
+defineEmits(['apply', 'discard', 'undo'])
+
+const formatTimestamp = (value) => {
+  if (!value) return ''
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
 </script>
 
 <template>
@@ -23,6 +40,7 @@ defineEmits(['apply', 'discard'])
       <span>Goal update</span>
       <strong v-if="status === 'applied'">Applied</strong>
       <strong v-else-if="status === 'discarded'">Not applied</strong>
+      <strong v-else-if="status === 'reverted'">Reverted</strong>
       <strong v-else>Needs your approval</strong>
     </div>
 
@@ -32,10 +50,14 @@ defineEmits(['apply', 'discard'])
     </div>
 
     <p v-if="action.reason">{{ action.reason }}</p>
+    <small v-if="status && updatedAt" class="action-time">{{ formatTimestamp(updatedAt) }}</small>
 
     <div v-if="!status" class="proposal-actions">
       <button type="button" class="apply-button" @click="$emit('apply')">Apply goals</button>
       <button type="button" class="discard-button" @click="$emit('discard')">Not now</button>
+    </div>
+    <div v-else-if="status === 'applied' && canUndo" class="proposal-actions">
+      <button type="button" class="discard-button" @click="$emit('undo')">Undo change</button>
     </div>
   </section>
 </template>
@@ -50,6 +72,7 @@ defineEmits(['apply', 'discard'])
 .goal-values span { color: #607069; font-size: .78rem; }
 .goal-values strong { font-size: 1rem; }
 .goal-proposal > p { margin: 10px 0 0; color: #52615d; font-size: .86rem; line-height: 1.45; }
+.action-time { display: block; margin-top: 8px; color: #74817c; font-size: .75rem; }
 .proposal-actions { margin-top: 12px; display: flex; gap: 8px; }
 .proposal-actions button { padding: 9px 12px; border-radius: 9px; font: inherit; font-size: .84rem; font-weight: 800; cursor: pointer; }
 .apply-button { border: 0; background: #173f34; color: #fff; }

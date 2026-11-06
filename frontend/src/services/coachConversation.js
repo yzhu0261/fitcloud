@@ -29,6 +29,24 @@ const normalizeProposedAction = (action) => {
   }
 }
 
+const normalizeGoalSnapshot = (goals) => {
+  const weeklyWorkoutGoal = Number(goals?.weeklyWorkoutGoal)
+  const dailyCalorieGoal = Number(goals?.dailyCalorieGoal)
+
+  if (
+    !Number.isInteger(weeklyWorkoutGoal) ||
+    weeklyWorkoutGoal < 1 ||
+    weeklyWorkoutGoal > 14 ||
+    !Number.isInteger(dailyCalorieGoal) ||
+    dailyCalorieGoal < 500 ||
+    dailyCalorieGoal > 10000
+  ) {
+    return undefined
+  }
+
+  return { weeklyWorkoutGoal, dailyCalorieGoal }
+}
+
 const normalizeMessages = (messages) => {
   if (!Array.isArray(messages)) return []
 
@@ -60,8 +78,18 @@ const normalizeMessages = (messages) => {
           : undefined,
       actionStatus:
         message.role === 'assistant' &&
-        ['applied', 'discarded'].includes(message.actionStatus)
+        ['applied', 'discarded', 'reverted'].includes(message.actionStatus)
           ? message.actionStatus
+          : undefined,
+      previousGoals:
+        message.role === 'assistant'
+          ? normalizeGoalSnapshot(message.previousGoals)
+          : undefined,
+      actionUpdatedAt:
+        message.role === 'assistant' &&
+        typeof message.actionUpdatedAt === 'string' &&
+        !Number.isNaN(Date.parse(message.actionUpdatedAt))
+          ? message.actionUpdatedAt
           : undefined,
     }))
 }

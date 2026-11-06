@@ -9,7 +9,10 @@ import {
   saveCoachConversation,
 } from '../services/coachConversation'
 import { parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
-import { applyCurrentGoalUpdate } from '../services/profilePreferences'
+import {
+  applyCurrentGoalUpdate,
+  restoreCurrentGoalUpdate,
+} from '../services/profilePreferences'
 
 const isOpen = ref(false)
 const isSending = ref(false)
@@ -186,8 +189,10 @@ const applyGoalAction = async (index) => {
   chatError.value = ''
 
   try {
-    await applyCurrentGoalUpdate(message.proposedAction)
+    const result = await applyCurrentGoalUpdate(message.proposedAction)
+    message.previousGoals = result.previousGoals
     message.actionStatus = 'applied'
+    message.actionUpdatedAt = new Date().toISOString()
     planNotice.value = 'Your account goals have been updated.'
     await saveCoachConversation(messages.value.slice(1))
   } catch (error) {
@@ -199,7 +204,29 @@ const applyGoalAction = async (index) => {
 
 const discardGoalAction = async (index) => {
   messages.value[index].actionStatus = 'discarded'
+  messages.value[index].actionUpdatedAt = new Date().toISOString()
   await saveCoachConversation(messages.value.slice(1))
+}
+
+const undoGoalAction = async (index) => {
+  const message = messages.value[index]
+
+  if (!message?.previousGoals || applyingActionIndex.value >= 0) return
+
+  applyingActionIndex.value = index
+  chatError.value = ''
+
+  try {
+    await restoreCurrentGoalUpdate(message.previousGoals)
+    message.actionStatus = 'reverted'
+    message.actionUpdatedAt = new Date().toISOString()
+    planNotice.value = 'The previous account goals have been restored.'
+    await saveCoachConversation(messages.value.slice(1))
+  } catch (error) {
+    chatError.value = error.message || 'The goal change could not be undone.'
+  } finally {
+    applyingActionIndex.value = -1
+  }
 }
 
 onMounted(async () => {
@@ -239,9 +266,12 @@ onMounted(async () => {
                 v-if="message.proposedAction"
                 :action="message.proposedAction"
                 :status="message.actionStatus"
+                :can-undo="Boolean(message.previousGoals)"
+                :updated-at="message.actionUpdatedAt"
                 compact
                 @apply="applyGoalAction(index)"
                 @discard="discardGoalAction(index)"
+                @undo="undoGoalAction(index)"
               />
               <div v-if="message.role === 'assistant' && index > 0" class="message-actions" aria-label="Rate this response">
                 <button type="button" :class="{ selected: message.feedback === 'helpful' }" title="Helpful" @click="setFeedback(index, 'helpful')">Helpful</button>
