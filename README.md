@@ -82,4 +82,12 @@ Until that variable is configured, the frontend continues using per-user browser
 `backend/delete-workout` contains the authenticated handler used by `DELETE /workouts?workoutId=...`.
 The Lambda execution role needs `dynamodb:DeleteItem` permission for the `FitCloudWorkouts` table only. Configure `WORKOUTS_TABLE` if the deployed table uses a different name, attach the existing Cognito JWT authorizer to the API Gateway route, and use `index.handler` as the Lambda handler.
 
+## Update nutrition Lambda
+
+`backend/update-nutrition` contains the authenticated handler for `PUT /nutrition`.
+Deploy it as a Node.js 20 or later Lambda using handler `index.handler`. Configure
+`NUTRITION_TABLE` with the nutrition table name and grant the execution role
+`dynamodb:UpdateItem` on only that table. The `PUT /nutrition` API Gateway route
+must use the existing Cognito JWT authorizer.
+
 ![RepVelta AWS Architecture](docs/architecture/fitcloud-aws-architecture.png)

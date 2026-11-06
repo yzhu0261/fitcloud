@@ -286,14 +286,25 @@
             <div class="history-header">
               <h3>{{ record.date }}</h3>
 
-              <button
-                type="button"
-                class="delete-history-button"
-                :disabled="Boolean(deletingNutritionId)"
-                @click="nutritionPendingDelete = record.nutritionId"
-              >
-                Delete
-              </button>
+              <div class="history-actions">
+                <button
+                  v-if="editingNutritionId !== record.nutritionId"
+                  type="button"
+                  class="edit-history-button"
+                  :disabled="Boolean(deletingNutritionId)"
+                  @click="startEditingNutrition(record)"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  class="delete-history-button"
+                  :disabled="Boolean(deletingNutritionId)"
+                  @click="startDeletingNutrition(record.nutritionId)"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
 
             <div
@@ -322,21 +333,56 @@
               </button>
             </div>
 
-            <!-- Display every food stored inside this nutrition record. -->
-            <div
-              v-for="(food, index) in record.foods"
-              :key="index"
-              class="history-food"
+            <form
+              v-if="editingNutritionId === record.nutritionId"
+              class="edit-nutrition-form"
+              @submit.prevent="updateNutrition"
             >
-              <span>{{ food.foodName }}</span>
+              <label class="edit-date-field">
+                Date
+                <input v-model="editNutritionDraft.date" type="date" />
+              </label>
 
-              <span>
-                {{ food.calories }} kcal ·
-                P {{ food.protein }}g ·
-                C {{ food.carbs }}g ·
-                F {{ food.fat }}g
-              </span>
-            </div>
+              <div
+                v-for="(food, index) in editNutritionDraft.foods"
+                :key="index"
+                class="edit-food-grid"
+              >
+                <input v-model.trim="food.foodName" type="text" aria-label="Food name" placeholder="Food name" />
+                <input v-model.number="food.calories" type="number" min="0" max="10000" aria-label="Calories" placeholder="Calories" />
+                <input v-model.number="food.protein" type="number" min="0" max="1000" step="0.1" aria-label="Protein" placeholder="Protein" />
+                <input v-model.number="food.carbs" type="number" min="0" max="2000" step="0.1" aria-label="Carbs" placeholder="Carbs" />
+                <input v-model.number="food.fat" type="number" min="0" max="1000" step="0.1" aria-label="Fat" placeholder="Fat" />
+                <button type="button" class="remove-edit-food" @click="removeEditFood(index)">Remove</button>
+              </div>
+
+              <button type="button" class="add-edit-food" @click="addEditFood">+ Add food</button>
+
+              <div class="edit-form-actions">
+                <button type="button" :disabled="isUpdatingNutrition" @click="cancelEditingNutrition">Cancel</button>
+                <button type="submit" class="save-edit-button" :disabled="isUpdatingNutrition">
+                  {{ isUpdatingNutrition ? 'Saving…' : 'Save changes' }}
+                </button>
+              </div>
+            </form>
+
+            <template v-else>
+              <!-- Display every food stored inside this nutrition record. -->
+              <div
+                v-for="(food, index) in record.foods"
+                :key="index"
+                class="history-food"
+              >
+                <span>{{ food.foodName }}</span>
+
+                <span>
+                  {{ food.calories }} kcal ·
+                  P {{ food.protein }}g ·
+                  C {{ food.carbs }}g ·
+                  F {{ food.fat }}g
+                </span>
+              </div>
+            </template>
           </article>
         </div>
       </section>
@@ -490,6 +536,9 @@ const historyError = ref('')
 const isSaving = ref(false)
 const deletingNutritionId = ref('')
 const nutritionPendingDelete = ref('')
+const editingNutritionId = ref('')
+const editNutritionDraft = ref(null)
+const isUpdatingNutrition = ref(false)
 
 // Sign the current user out and return to the login page.
 const handleLogout = async () => {
@@ -534,6 +583,100 @@ const addFood = () => {
 // Remove a food record from today's meals.
 const removeFood = (index) => {
   foods.value.splice(index, 1)
+}
+
+const startEditingNutrition = (record) => {
+  editingNutritionId.value = record.nutritionId
+  editNutritionDraft.value = {
+    date: record.date,
+    foods: (record.foods ?? []).map((food) => ({ ...food })),
+  }
+  nutritionPendingDelete.value = ''
+  historyError.value = ''
+}
+
+const cancelEditingNutrition = () => {
+  editingNutritionId.value = ''
+  editNutritionDraft.value = null
+}
+
+const addEditFood = () => {
+  editNutritionDraft.value.foods.push({
+    foodName: '',
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+  })
+}
+
+const removeEditFood = (index) => {
+  editNutritionDraft.value.foods.splice(index, 1)
+}
+
+const startDeletingNutrition = (nutritionId) => {
+  cancelEditingNutrition()
+  nutritionPendingDelete.value = nutritionId
+}
+
+const updateNutrition = async () => {
+  if (!editingNutritionId.value || isUpdatingNutrition.value) return
+
+  historyError.value = ''
+  saveMessage.value = ''
+
+  const draft = editNutritionDraft.value
+  const hasInvalidFood = draft.foods.some(
+    (food) =>
+      !String(food.foodName || '').trim() ||
+      [food.calories, food.protein, food.carbs, food.fat].some(
+        (value) => !Number.isFinite(Number(value)) || Number(value) < 0,
+      ),
+  )
+
+  if (!draft.date || draft.foods.length === 0 || hasInvalidFood) {
+    historyError.value = 'A nutrition record needs a date and valid food details.'
+    return
+  }
+
+  isUpdatingNutrition.value = true
+
+  try {
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
+
+    if (!idToken) throw new Error('Your session has expired. Please sign in again.')
+
+    const response = await fetch(
+      'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: idToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          nutritionId: editingNutritionId.value,
+          ...draft,
+        }),
+      },
+    )
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.message || 'The nutrition record could not be updated.')
+    }
+
+    nutritionHistory.value = nutritionHistory.value.map((record) =>
+      record.nutritionId === editingNutritionId.value ? result : record,
+    )
+    cancelEditingNutrition()
+    saveMessage.value = 'Nutrition record updated successfully.'
+  } catch (error) {
+    historyError.value = error.message || 'The nutrition record could not be updated.'
+  } finally {
+    isUpdatingNutrition.value = false
+  }
 }
 
 // Load the current user's saved nutrition records from AWS.
@@ -1214,15 +1357,30 @@ const deleteNutrition = async (nutritionId) => {
   margin-bottom: 12px;
 }
 
-/* Delete button for a saved nutrition record. */
+.history-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.edit-history-button,
 .delete-history-button {
-  border: none;
+  border: 1px solid #d7e1da;
   background: #ffffff;
   padding: 10px 14px;
   border-radius: 10px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.95rem;
+}
+
+.edit-history-button {
+  color: #315e51;
+}
+
+/* Delete button for a saved nutrition record. */
+.delete-history-button {
+  border-color: #e3c2bd;
+  color: #a43a30;
 }
 
 .delete-history-button:disabled {
@@ -1272,6 +1430,94 @@ const deleteNutrition = async (nutritionId) => {
 }
 
 .delete-confirmation button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.edit-nutrition-form {
+  padding: 16px;
+  border: 1px solid #cfddd4;
+  border-radius: 14px;
+  background: #f6faf7;
+}
+
+.edit-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: #315e51;
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.edit-nutrition-form input {
+  min-width: 0;
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #d6dfd9;
+  border-radius: 9px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+}
+
+.edit-food-grid {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(4, 0.7fr) auto;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.remove-edit-food {
+  border: 0;
+  background: transparent;
+  color: #a43a30;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.add-edit-food {
+  margin-top: 12px;
+  padding: 8px 11px;
+  border: 1px dashed #9fb5a7;
+  border-radius: 9px;
+  background: #fff;
+  color: #315e51;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.edit-form-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.edit-form-actions button {
+  padding: 9px 13px;
+  border: 1px solid #cfd9d2;
+  border-radius: 9px;
+  background: #fff;
+  color: #52615d;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.edit-form-actions .save-edit-button {
+  border-color: #cbed63;
+  background: #cbed63;
+  color: #17352c;
+}
+
+.edit-form-actions button:disabled {
   cursor: wait;
   opacity: 0.55;
 }
@@ -1381,6 +1627,14 @@ const deleteNutrition = async (nutritionId) => {
 
   .delete-confirmation p {
     width: 100%;
+  }
+
+  .edit-food-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .edit-food-grid input[aria-label='Food name'] {
+    grid-column: 1 / -1;
   }
 }
 </style>
