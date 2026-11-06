@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import GoalUpdateProposal from './GoalUpdateProposal.vue'
 import { requestCoachReply } from '../services/aiCoach'
 import {
   clearCoachConversation,
@@ -8,6 +9,7 @@ import {
   saveCoachConversation,
 } from '../services/coachConversation'
 import { parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
+import { applyCurrentGoalUpdate } from '../services/profilePreferences'
 
 const isOpen = ref(false)
 const isSending = ref(false)
@@ -17,6 +19,7 @@ const chatError = ref('')
 const messageList = ref(null)
 const planNotice = ref('')
 const feedbackDrafts = ref({})
+const applyingActionIndex = ref(-1)
 const messages = ref([
   {
     role: 'assistant',
@@ -72,11 +75,12 @@ const sendMessage = async (suggestedMessage) => {
   await scrollToLatest()
 
   try {
-    const reply = await requestCoachReply(message, conversation)
+    const result = await requestCoachReply(message, conversation)
     messages.value.push({
       role: 'assistant',
-      content: reply,
-      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+      content: result.reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(result.reply)),
+      proposedAction: result.proposedAction,
     })
     await saveCoachConversation(messages.value.slice(1))
   } catch (error) {
@@ -121,14 +125,15 @@ const reviseFromFeedback = async (assistantIndex) => {
   chatError.value = ''
 
   try {
-    const reply = await requestCoachReply(
+    const result = await requestCoachReply(
       message,
       messages.value.slice(1, assistantIndex + 1),
     )
     messages.value[assistantIndex] = {
       role: 'assistant',
-      content: reply,
-      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+      content: result.reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(result.reply)),
+      proposedAction: result.proposedAction,
       revisedFromFeedback: true,
     }
     delete feedbackDrafts.value[assistantIndex]
@@ -154,14 +159,15 @@ const regenerateResponse = async (assistantIndex) => {
   regeneratingIndex.value = assistantIndex
 
   try {
-    const reply = await requestCoachReply(
+    const result = await requestCoachReply(
       messages.value[userIndex].content,
       messages.value.slice(1, userIndex),
     )
     messages.value[assistantIndex] = {
       role: 'assistant',
-      content: reply,
-      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+      content: result.reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(result.reply)),
+      proposedAction: result.proposedAction,
     }
     await saveCoachConversation(messages.value.slice(1))
   } catch (error) {
@@ -169,6 +175,31 @@ const regenerateResponse = async (assistantIndex) => {
   } finally {
     regeneratingIndex.value = -1
   }
+}
+
+const applyGoalAction = async (index) => {
+  const message = messages.value[index]
+
+  if (!message?.proposedAction || applyingActionIndex.value >= 0) return
+
+  applyingActionIndex.value = index
+  chatError.value = ''
+
+  try {
+    await applyCurrentGoalUpdate(message.proposedAction)
+    message.actionStatus = 'applied'
+    planNotice.value = 'Your account goals have been updated.'
+    await saveCoachConversation(messages.value.slice(1))
+  } catch (error) {
+    chatError.value = error.message || 'The proposed goals could not be applied.'
+  } finally {
+    applyingActionIndex.value = -1
+  }
+}
+
+const discardGoalAction = async (index) => {
+  messages.value[index].actionStatus = 'discarded'
+  await saveCoachConversation(messages.value.slice(1))
 }
 
 onMounted(async () => {
@@ -204,6 +235,14 @@ onMounted(async () => {
             <div class="widget-message-copy">
               <p>{{ message.content }}</p>
               <button v-if="message.isWeeklyPlan" type="button" class="widget-save-plan" @click="handleSavePlan(message.content)">Save plan</button>
+              <GoalUpdateProposal
+                v-if="message.proposedAction"
+                :action="message.proposedAction"
+                :status="message.actionStatus"
+                compact
+                @apply="applyGoalAction(index)"
+                @discard="discardGoalAction(index)"
+              />
               <div v-if="message.role === 'assistant' && index > 0" class="message-actions" aria-label="Rate this response">
                 <button type="button" :class="{ selected: message.feedback === 'helpful' }" title="Helpful" @click="setFeedback(index, 'helpful')">Helpful</button>
                 <button type="button" :class="{ selected: message.feedback === 'not-helpful' }" title="Not helpful" @click="setFeedback(index, 'not-helpful')">Not helpful</button>

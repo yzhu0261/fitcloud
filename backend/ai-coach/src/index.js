@@ -163,6 +163,8 @@ const createConversationPrompt = (conversation, message) => {
 }
 
 const createCoachAgent = (authorization, preferences) => {
+  let proposedAction = null
+
   const getUserGoals = tool({
     name: 'get_user_goals',
     description:
@@ -270,7 +272,33 @@ const createCoachAgent = (authorization, preferences) => {
     },
   })
 
-  return new Agent({
+  const proposeGoalUpdate = tool({
+    name: 'propose_goal_update',
+    description:
+      'Prepare a weekly workout goal and daily calorie goal change for user review. Use only when the user explicitly asks to set or change their account goals. This tool never saves the change.',
+    parameters: z.object({
+      weeklyWorkoutGoal: z.number().int().min(1).max(14),
+      dailyCalorieGoal: z.number().int().min(500).max(10000),
+      reason: z.string().min(1).max(300),
+    }),
+    async execute({ weeklyWorkoutGoal, dailyCalorieGoal, reason }) {
+      proposedAction = {
+        type: 'update_profile_goals',
+        weeklyWorkoutGoal,
+        dailyCalorieGoal,
+        reason: reason.trim(),
+      }
+
+      return JSON.stringify({
+        status: 'awaiting_user_confirmation',
+        message:
+          'The goal change has been prepared for review. It has not been saved.',
+        proposedAction,
+      })
+    },
+  })
+
+  const agent = new Agent({
     name: 'RepVelta Fitness Coach',
     model: process.env.OPENAI_MODEL || 'gpt-6-luna',
     instructions: `
@@ -295,17 +323,29 @@ Use explicit user feedback from the recent conversation. When an answer was
 marked not helpful, revise the substance instead of merely rephrasing it. Apply
 the user's feedback note, preserve useful parts, and clearly improve the plan.
 When an answer was marked helpful, preserve the useful level of detail and tone.
+Only when the user explicitly asks to set or change their account goals, call
+propose_goal_update. If they specify only one goal, first use get_user_goals and
+keep the other saved value. Explain the proposed values and that the user must
+confirm them in the app. Never call this tool merely because a different goal
+seems beneficial, and never claim the proposal has already been saved.
 Do not diagnose medical conditions or replace a doctor, physiotherapist, or dietitian.
 If the user describes pain, injury, disordered eating, or an emergency, recommend qualified professional help.
-This first version is read-only. Never claim that you changed, created, or deleted user data.
+Never claim that you changed, created, or deleted user data unless the app has
+explicitly confirmed the operation after the user approved it.
     `.trim(),
     tools: [
       getUserGoals,
       getRecentWorkouts,
       getRecentNutrition,
       calculateWeeklyProgress,
+      proposeGoalUpdate,
     ],
   })
+
+  return {
+    agent,
+    getProposedAction: () => proposedAction,
+  }
 }
 
 export const handler = async (event) => {
@@ -342,7 +382,10 @@ export const handler = async (event) => {
 
   try {
     await ensureOpenAiApiKey()
-    const agent = createCoachAgent(authorization, preferences)
+    const { agent, getProposedAction } = createCoachAgent(
+      authorization,
+      preferences,
+    )
     const result = await run(
       agent,
       createConversationPrompt(conversation, message),
@@ -351,6 +394,7 @@ export const handler = async (event) => {
     return response(200, {
       reply: result.finalOutput,
       agent: 'RepVelta Fitness Coach',
+      proposedAction: getProposedAction(),
     })
   } catch (error) {
     console.error('AI Coach error:', error)

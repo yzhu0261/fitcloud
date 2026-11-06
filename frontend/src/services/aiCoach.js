@@ -1,36 +1,7 @@
-import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
+import { fetchAuthSession } from 'aws-amplify/auth'
+import { loadCurrentProfilePreferences } from './profilePreferences'
 
 const apiUrl = import.meta.env.VITE_AI_COACH_API_URL
-
-const getCoachPreferences = async () => {
-  const user = await getCurrentUser()
-  const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
-
-  if (!savedProfile) {
-    return {
-      profileConfigured: false,
-      weeklyWorkoutGoal: 3,
-      dailyCalorieGoal: 2000,
-    }
-  }
-
-  try {
-    const profile = JSON.parse(savedProfile)
-
-    return {
-      profileConfigured: true,
-      displayName: String(profile.displayName || '').trim().slice(0, 40),
-      weeklyWorkoutGoal: Number(profile.weeklyWorkoutGoal) || 3,
-      dailyCalorieGoal: Number(profile.dailyCalorieGoal) || 2000,
-    }
-  } catch {
-    return {
-      profileConfigured: false,
-      weeklyWorkoutGoal: 3,
-      dailyCalorieGoal: 2000,
-    }
-  }
-}
 
 const getConversationContext = (messages = []) =>
   messages
@@ -69,7 +40,7 @@ export const requestCoachReply = async (message, messages = []) => {
     throw new Error('Your session has expired. Please sign in again.')
   }
 
-  const preferences = await getCoachPreferences()
+  const preferences = await loadCurrentProfilePreferences()
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
@@ -88,5 +59,11 @@ export const requestCoachReply = async (message, messages = []) => {
     throw new Error(result.message || 'The AI Coach could not respond.')
   }
 
-  return result.reply
+  return {
+    reply: String(result.reply || ''),
+    proposedAction:
+      result.proposedAction?.type === 'update_profile_goals'
+        ? result.proposedAction
+        : undefined,
+  }
 }

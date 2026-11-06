@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
+import GoalUpdateProposal from '../components/GoalUpdateProposal.vue'
 import { requestCoachReply } from '../services/aiCoach'
 import {
   clearCoachConversation,
@@ -11,6 +12,7 @@ import {
   saveCoachConversation,
 } from '../services/coachConversation'
 import { loadWeeklyPlan, parseWeeklyPlan, saveWeeklyPlan } from '../services/weeklyPlan'
+import { applyCurrentGoalUpdate } from '../services/profilePreferences'
 
 const messageInput = ref('')
 const isSending = ref(false)
@@ -20,6 +22,7 @@ const messageList = ref(null)
 const savedPlan = ref(null)
 const planNotice = ref('')
 const feedbackDrafts = ref({})
+const applyingActionIndex = ref(-1)
 
 const messages = ref([
   {
@@ -75,11 +78,12 @@ const sendMessage = async (suggestedMessage) => {
   await scrollToLatest()
 
   try {
-    const reply = await requestCoachReply(message, conversation)
+    const result = await requestCoachReply(message, conversation)
     messages.value.push({
       role: 'assistant',
-      content: reply,
-      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+      content: result.reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(result.reply)),
+      proposedAction: result.proposedAction,
     })
     await saveCoachConversation(messages.value.slice(1))
   } catch (error) {
@@ -124,14 +128,15 @@ const reviseFromFeedback = async (assistantIndex) => {
   chatError.value = ''
 
   try {
-    const reply = await requestCoachReply(
+    const result = await requestCoachReply(
       message,
       messages.value.slice(1, assistantIndex + 1),
     )
     messages.value[assistantIndex] = {
       role: 'assistant',
-      content: reply,
-      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+      content: result.reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(result.reply)),
+      proposedAction: result.proposedAction,
       revisedFromFeedback: true,
     }
     delete feedbackDrafts.value[assistantIndex]
@@ -157,14 +162,15 @@ const regenerateResponse = async (assistantIndex) => {
   regeneratingIndex.value = assistantIndex
 
   try {
-    const reply = await requestCoachReply(
+    const result = await requestCoachReply(
       messages.value[userIndex].content,
       messages.value.slice(1, userIndex),
     )
     messages.value[assistantIndex] = {
       role: 'assistant',
-      content: reply,
-      isWeeklyPlan: Boolean(parseWeeklyPlan(reply)),
+      content: result.reply,
+      isWeeklyPlan: Boolean(parseWeeklyPlan(result.reply)),
+      proposedAction: result.proposedAction,
     }
     await saveCoachConversation(messages.value.slice(1))
   } catch (error) {
@@ -172,6 +178,31 @@ const regenerateResponse = async (assistantIndex) => {
   } finally {
     regeneratingIndex.value = -1
   }
+}
+
+const applyGoalAction = async (index) => {
+  const message = messages.value[index]
+
+  if (!message?.proposedAction || applyingActionIndex.value >= 0) return
+
+  applyingActionIndex.value = index
+  chatError.value = ''
+
+  try {
+    await applyCurrentGoalUpdate(message.proposedAction)
+    message.actionStatus = 'applied'
+    planNotice.value = 'Your account goals have been updated.'
+    await saveCoachConversation(messages.value.slice(1))
+  } catch (error) {
+    chatError.value = error.message || 'The proposed goals could not be applied.'
+  } finally {
+    applyingActionIndex.value = -1
+  }
+}
+
+const discardGoalAction = async (index) => {
+  messages.value[index].actionStatus = 'discarded'
+  await saveCoachConversation(messages.value.slice(1))
 }
 
 onMounted(async () => {
@@ -196,7 +227,7 @@ onMounted(async () => {
       <div class="sidebar-card">
         <div class="sidebar-card-icon">✦</div>
         <h3>Ask.<br />Learn.<br />Improve.</h3>
-        <p>Your coach can review saved activity and create plans, but cannot change your records.</p>
+        <p>Your coach can review activity and prepare plans or goal changes for your approval.</p>
       </div>
     </aside>
 
@@ -227,6 +258,13 @@ onMounted(async () => {
                 <button v-if="message.isWeeklyPlan" type="button" class="save-plan-button" @click="handleSavePlan(message.content)">
                   Save weekly plan
                 </button>
+                <GoalUpdateProposal
+                  v-if="message.proposedAction"
+                  :action="message.proposedAction"
+                  :status="message.actionStatus"
+                  @apply="applyGoalAction(index)"
+                  @discard="discardGoalAction(index)"
+                />
                 <div v-if="message.role === 'assistant' && index > 0" class="message-actions" aria-label="Rate this response">
                   <button type="button" :class="{ selected: message.feedback === 'helpful' }" @click="setFeedback(index, 'helpful')">Helpful</button>
                   <button type="button" :class="{ selected: message.feedback === 'not-helpful' }" @click="setFeedback(index, 'not-helpful')">Not helpful</button>
@@ -284,6 +322,7 @@ onMounted(async () => {
             <li><span>02</span> Review nutrition records</li>
             <li><span>03</span> Calculate seven-day progress</li>
             <li><span>04</span> Create a goal-aware weekly plan</li>
+            <li><span>05</span> Propose goal changes for your approval</li>
           </ul>
           <div class="safety-note"><strong>Health note</strong><p>AI guidance is educational and does not replace medical or professional advice.</p></div>
           <div v-if="savedPlan" class="saved-plan-note">

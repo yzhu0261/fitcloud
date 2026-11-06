@@ -5,6 +5,30 @@ const storageKey = async () => {
   return `repvelta-coach-conversation-${user.username}`
 }
 
+const normalizeProposedAction = (action) => {
+  const weeklyWorkoutGoal = Number(action?.weeklyWorkoutGoal)
+  const dailyCalorieGoal = Number(action?.dailyCalorieGoal)
+
+  if (
+    action?.type !== 'update_profile_goals' ||
+    !Number.isInteger(weeklyWorkoutGoal) ||
+    weeklyWorkoutGoal < 1 ||
+    weeklyWorkoutGoal > 14 ||
+    !Number.isInteger(dailyCalorieGoal) ||
+    dailyCalorieGoal < 500 ||
+    dailyCalorieGoal > 10000
+  ) {
+    return undefined
+  }
+
+  return {
+    type: 'update_profile_goals',
+    weeklyWorkoutGoal,
+    dailyCalorieGoal,
+    reason: String(action.reason || '').trim().slice(0, 300),
+  }
+}
+
 const normalizeMessages = (messages) => {
   if (!Array.isArray(messages)) return []
 
@@ -29,6 +53,15 @@ const normalizeMessages = (messages) => {
         message.role === 'assistant' &&
         typeof message.feedbackNote === 'string'
           ? message.feedbackNote.trim().slice(0, 300)
+          : undefined,
+      proposedAction:
+        message.role === 'assistant'
+          ? normalizeProposedAction(message.proposedAction)
+          : undefined,
+      actionStatus:
+        message.role === 'assistant' &&
+        ['applied', 'discarded'].includes(message.actionStatus)
+          ? message.actionStatus
           : undefined,
     }))
 }

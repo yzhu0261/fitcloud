@@ -1,9 +1,13 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import UserAvatar from '../components/UserAvatar.vue'
+import {
+  loadProfilePreferences,
+  saveProfilePreferences,
+} from '../services/profilePreferences'
 import {
   deleteUser,
   fetchUserAttributes,
@@ -35,8 +39,6 @@ const pageError = ref('')
 const isLoading = ref(true)
 const isSavingPassword = ref(false)
 
-const storageKey = () => `repvelta-profile-${username.value || 'member'}`
-
 const loadAccount = async () => {
   isLoading.value = true
   pageError.value = ''
@@ -51,10 +53,9 @@ const loadAccount = async () => {
     email.value =
       attributes.email || user.signInDetails?.loginId || 'Email unavailable'
 
-    const savedProfile = localStorage.getItem(storageKey())
+    const profile = loadProfilePreferences(user.username)
 
-    if (savedProfile) {
-      const profile = JSON.parse(savedProfile)
+    if (profile.profileConfigured) {
       displayName.value = profile.displayName || ''
       weeklyWorkoutGoal.value = profile.weeklyWorkoutGoal ?? 3
       dailyCalorieGoal.value = profile.dailyCalorieGoal ?? 2000
@@ -84,17 +85,22 @@ const saveProfile = () => {
     return
   }
 
-  localStorage.setItem(
-    storageKey(),
-    JSON.stringify({
+  saveProfilePreferences(username.value, {
       displayName: displayName.value.trim(),
       weeklyWorkoutGoal: workoutGoal,
       dailyCalorieGoal: calorieGoal,
-    }),
-  )
-
-  window.dispatchEvent(new CustomEvent('repvelta-profile-updated'))
+  })
   profileMessage.value = 'Your preferences have been saved on this device.'
+}
+
+const handleProfileUpdated = (event) => {
+  const profile = event.detail
+
+  if (!profile) return
+
+  displayName.value = profile.displayName || ''
+  weeklyWorkoutGoal.value = profile.weeklyWorkoutGoal ?? 3
+  dailyCalorieGoal.value = profile.dailyCalorieGoal ?? 2000
 }
 
 const changePassword = async () => {
@@ -152,14 +158,21 @@ const handleDeleteAccount = async () => {
 
   try {
     await deleteUser()
-    localStorage.removeItem(storageKey())
+    localStorage.removeItem(`repvelta-profile-${username.value || 'member'}`)
     router.push('/register')
   } catch (error) {
     pageError.value = error.message || 'We could not delete your account.'
   }
 }
 
-onMounted(loadAccount)
+onMounted(() => {
+  loadAccount()
+  window.addEventListener('repvelta-profile-updated', handleProfileUpdated)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('repvelta-profile-updated', handleProfileUpdated)
+})
 </script>
 
 <template>

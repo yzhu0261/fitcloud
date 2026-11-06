@@ -17,7 +17,7 @@ RepVelta uses a serverless AWS architecture with services including Amazon S3, C
 
 ## AI Coach
 
-The AI Coach implementation is in `backend/ai-coach`. It uses the OpenAI Agents SDK inside AWS Lambda and exposes four read-only tools for profile goals, recent workouts, recent nutrition, and seven-day progress. Helpful/not-helpful ratings and optional feedback notes are included in later turns so the Agent can revise its advice. Weekly plans remain human-controlled: the Agent proposes the plan, and the user explicitly chooses whether to save it.
+The AI Coach implementation is in `backend/ai-coach`. It uses the OpenAI Agents SDK inside AWS Lambda and exposes four read-only tools for profile goals, recent workouts, recent nutrition, and seven-day progress. A fifth tool can prepare an account-goal update, but it has no side effects: the user must review and approve the proposal in the app before it is saved. Helpful/not-helpful ratings and optional feedback notes are included in later turns so the Agent can revise its advice. Weekly plans and goal changes remain human-controlled.
 
 Required Lambda environment variables:
 
