@@ -90,4 +90,23 @@ Deploy it as a Node.js 20 or later Lambda using handler `index.handler`. Configu
 `dynamodb:UpdateItem` on only that table. The `PUT /nutrition` API Gateway route
 must use the existing Cognito JWT authorizer.
 
+## Cloud profile preferences
+
+`backend/profiles` contains the authenticated `GET /profile` and `PUT /profile`
+handler used to sync display names, weekly workout goals, and daily calorie goals
+across devices. Create an on-demand DynamoDB table named `RepVeltaProfiles` with
+`userId` (String) as its partition key, then deploy the handler as a Node.js 20
+or later Lambda using `index.handler`.
+
+Configure these environment variables:
+
+- `PROFILES_TABLE=RepVeltaProfiles`
+- `ALLOWED_ORIGIN=https://main.d4qy0pgoybda9.amplifyapp.com`
+
+Grant the Lambda role only `dynamodb:GetItem` and `dynamodb:UpdateItem` on the
+profiles table. Attach it to Cognito-protected API Gateway `GET /profile` and
+`PUT /profile` routes. The frontend keeps a local fallback when the cloud
+profile API is unavailable. If another API endpoint is used, set
+`VITE_PROFILE_API_URL` in the frontend environment.
+
 ![RepVelta AWS Architecture](docs/architecture/fitcloud-aws-architecture.png)

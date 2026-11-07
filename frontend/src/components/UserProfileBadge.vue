@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { fetchUserAttributes, getCurrentUser } from 'aws-amplify/auth'
 import { RouterLink } from 'vue-router'
 import UserAvatar from './UserAvatar.vue'
+import { loadCurrentProfilePreferences } from '../services/profilePreferences'
 
 const cacheKey = 'repvelta-profile-badge'
 const readCache = () => {
@@ -32,8 +33,7 @@ const cacheProfile = () => {
 const loadProfile = async () => {
   try {
     const [user, attributes] = await Promise.all([getCurrentUser(), fetchUserAttributes()])
-    const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
-    const profile = savedProfile ? JSON.parse(savedProfile) : null
+    const profile = await loadCurrentProfilePreferences()
 
     displayName.value = String(profile?.displayName || '').trim()
     accountLabel.value = attributes.email || user.username || 'RepVelta Member'

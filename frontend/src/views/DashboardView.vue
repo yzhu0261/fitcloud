@@ -1,11 +1,12 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { signOut, fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
+import { signOut, fetchAuthSession } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import AppIcon from '../components/AppIcon.vue'
+import { loadCurrentProfilePreferences } from '../services/profilePreferences'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -197,12 +198,7 @@ const calorieGoalMessage = computed(() => {
 
 const loadGoals = async () => {
   try {
-    const user = await getCurrentUser()
-    const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
-
-    if (!savedProfile) return
-
-    const profile = JSON.parse(savedProfile)
+    const profile = await loadCurrentProfilePreferences()
     const savedGoal = Number(profile.weeklyWorkoutGoal)
     const savedCalorieGoal = Number(profile.dailyCalorieGoal)
 

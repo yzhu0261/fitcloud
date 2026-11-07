@@ -1,4 +1,8 @@
-import { getCurrentUser } from 'aws-amplify/auth'
+import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
+
+const PROFILE_API_URL =
+  import.meta.env.VITE_PROFILE_API_URL ||
+  'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/profile'
 
 const DEFAULT_PROFILE = Object.freeze({
   profileConfigured: false,
@@ -43,12 +47,7 @@ export const loadProfilePreferences = (username) => {
   }
 }
 
-export const loadCurrentProfilePreferences = async () => {
-  const user = await getCurrentUser()
-  return loadProfilePreferences(user.username)
-}
-
-export const saveProfilePreferences = (username, profile) => {
+const storeProfilePreferences = (username, profile, notify = true) => {
   const normalizedProfile = normalizeProfile(profile)
   const storedProfile = {
     displayName: normalizedProfile.displayName,
@@ -57,11 +56,70 @@ export const saveProfilePreferences = (username, profile) => {
   }
 
   localStorage.setItem(storageKey(username), JSON.stringify(storedProfile))
-  window.dispatchEvent(
-    new CustomEvent('repvelta-profile-updated', { detail: storedProfile }),
-  )
+
+  if (notify) {
+    window.dispatchEvent(
+      new CustomEvent('repvelta-profile-updated', { detail: storedProfile }),
+    )
+  }
 
   return normalizedProfile
+}
+
+const getProfileAuthorization = async () => {
+  const session = await fetchAuthSession()
+  const idToken = session.tokens?.idToken?.toString()
+
+  if (!idToken) throw new Error('Your session has expired. Please sign in again.')
+  return `Bearer ${idToken}`
+}
+
+export const loadCurrentProfilePreferences = async () => {
+  const user = await getCurrentUser()
+  const localProfile = loadProfilePreferences(user.username)
+
+  try {
+    const response = await fetch(PROFILE_API_URL, {
+      headers: { Authorization: await getProfileAuthorization() },
+    })
+
+    if (!response.ok) return localProfile
+
+    const result = await response.json()
+    if (!result.profile) return localProfile
+
+    return storeProfilePreferences(user.username, result.profile, false)
+  } catch {
+    return localProfile
+  }
+}
+
+export const saveProfilePreferences = (username, profile) => {
+  return storeProfilePreferences(username, profile)
+}
+
+export const saveCurrentProfilePreferences = async (profile) => {
+  const user = await getCurrentUser()
+  const normalizedProfile = storeProfilePreferences(user.username, profile)
+
+  try {
+    const response = await fetch(PROFILE_API_URL, {
+      method: 'PUT',
+      headers: {
+        Authorization: await getProfileAuthorization(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(normalizedProfile),
+    })
+
+    if (!response.ok) return { profile: normalizedProfile, cloudSynced: false }
+
+    const result = await response.json()
+    const savedProfile = storeProfilePreferences(user.username, result.profile || normalizedProfile)
+    return { profile: savedProfile, cloudSynced: true }
+  } catch {
+    return { profile: normalizedProfile, cloudSynced: false }
+  }
 }
 
 export const applyCurrentGoalUpdate = async (action) => {
@@ -90,13 +148,13 @@ export const applyCurrentGoalUpdate = async (action) => {
     dailyCalorieGoal: currentProfile.dailyCalorieGoal,
   }
 
-  const profile = saveProfilePreferences(user.username, {
+  const result = await saveCurrentProfilePreferences({
     ...currentProfile,
     weeklyWorkoutGoal,
     dailyCalorieGoal,
   })
 
-  return { profile, previousGoals }
+  return { profile: result.profile, previousGoals, cloudSynced: result.cloudSynced }
 }
 
 export const restoreCurrentGoalUpdate = async (previousGoals) => {
@@ -117,10 +175,12 @@ export const restoreCurrentGoalUpdate = async (previousGoals) => {
   const user = await getCurrentUser()
   const currentProfile = loadProfilePreferences(user.username)
 
-  return saveProfilePreferences(user.username, {
+  const result = await saveCurrentProfilePreferences({
     ...currentProfile,
     weeklyWorkoutGoal,
     dailyCalorieGoal,
   })
+
+  return result.profile
 }
 

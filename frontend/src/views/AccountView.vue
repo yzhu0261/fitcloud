@@ -5,8 +5,9 @@ import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import {
+  loadCurrentProfilePreferences,
   loadProfilePreferences,
-  saveProfilePreferences,
+  saveCurrentProfilePreferences,
 } from '../services/profilePreferences'
 import {
   deleteUser,
@@ -37,6 +38,7 @@ const passwordMessage = ref('')
 const passwordError = ref('')
 const pageError = ref('')
 const isLoading = ref(true)
+const isSavingProfile = ref(false)
 const isSavingPassword = ref(false)
 
 const loadAccount = async () => {
@@ -53,9 +55,10 @@ const loadAccount = async () => {
     email.value =
       attributes.email || user.signInDetails?.loginId || 'Email unavailable'
 
-    const profile = loadProfilePreferences(user.username)
+    const localProfile = loadProfilePreferences(user.username)
+    const profile = await loadCurrentProfilePreferences()
 
-    if (profile.profileConfigured) {
+    if (profile.profileConfigured || localProfile.profileConfigured) {
       displayName.value = profile.displayName || ''
       weeklyWorkoutGoal.value = profile.weeklyWorkoutGoal ?? 3
       dailyCalorieGoal.value = profile.dailyCalorieGoal ?? 2000
@@ -67,7 +70,7 @@ const loadAccount = async () => {
   }
 }
 
-const saveProfile = () => {
+const saveProfile = async () => {
   profileMessage.value = ''
 
   const workoutGoal = Number(weeklyWorkoutGoal.value)
@@ -85,12 +88,21 @@ const saveProfile = () => {
     return
   }
 
-  saveProfilePreferences(username.value, {
+  isSavingProfile.value = true
+  try {
+    const result = await saveCurrentProfilePreferences({
       displayName: displayName.value.trim(),
       weeklyWorkoutGoal: workoutGoal,
       dailyCalorieGoal: calorieGoal,
-  })
-  profileMessage.value = 'Your preferences have been saved on this device.'
+    })
+    profileMessage.value = result.cloudSynced
+      ? 'Your preferences have been saved and synced across devices.'
+      : 'Saved on this device. Cloud sync is temporarily unavailable.'
+  } catch (error) {
+    profileMessage.value = error.message || 'Your preferences could not be saved.'
+  } finally {
+    isSavingProfile.value = false
+  }
 }
 
 const handleProfileUpdated = (event) => {
@@ -283,7 +295,9 @@ onBeforeUnmount(() => {
 
               <p v-if="profileMessage" class="form-message">{{ profileMessage }}</p>
 
-              <button type="submit" class="primary-button">Save preferences</button>
+              <button type="submit" class="primary-button" :disabled="isSavingProfile">
+                {{ isSavingProfile ? 'Saving...' : 'Save preferences' }}
+              </button>
             </form>
           </article>
 

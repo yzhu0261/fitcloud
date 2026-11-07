@@ -414,10 +414,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchAuthSession, getCurrentUser, signOut } from 'aws-amplify/auth'
+import { fetchAuthSession, signOut } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
+import { loadCurrentProfilePreferences } from '../services/profilePreferences'
 
 const router = useRouter()
 
@@ -567,12 +568,8 @@ const calorieGoalMessage = computed(() => {
 
 const loadCalorieGoal = async () => {
   try {
-    const user = await getCurrentUser()
-    const savedProfile = localStorage.getItem(`repvelta-profile-${user.username}`)
-
-    if (!savedProfile) return
-
-    const savedGoal = Number(JSON.parse(savedProfile).dailyCalorieGoal)
+    const profile = await loadCurrentProfilePreferences()
+    const savedGoal = Number(profile.dailyCalorieGoal)
 
     if (Number.isFinite(savedGoal) && savedGoal >= 500 && savedGoal <= 10000) {
       dailyCalorieGoal.value = savedGoal
