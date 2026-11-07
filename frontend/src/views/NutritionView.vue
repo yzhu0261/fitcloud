@@ -255,8 +255,24 @@
           </div>
 
           <span class="food-count">
-            {{ nutritionHistory.length }} records
+            {{ filteredNutritionHistory.length }}{{ hasHistoryFilters ? ` of ${nutritionHistory.length}` : '' }} records
           </span>
+        </div>
+
+        <div v-if="nutritionHistory.length" class="history-filters" aria-label="Filter nutrition history">
+          <label class="history-search">
+            <span>Search</span>
+            <input v-model="historySearch" type="search" placeholder="Food name" />
+          </label>
+          <label>
+            <span>From</span>
+            <input v-model="historyDateFrom" type="date" />
+          </label>
+          <label>
+            <span>To</span>
+            <input v-model="historyDateTo" type="date" />
+          </label>
+          <button v-if="hasHistoryFilters" type="button" @click="clearHistoryFilters">Clear</button>
         </div>
 
         <div v-if="isLoadingHistory" class="empty-state" aria-live="polite">
@@ -275,10 +291,15 @@
           <span>Saved nutrition records will appear here.</span>
         </div>
 
+        <div v-else-if="filteredNutritionHistory.length === 0" class="empty-state">
+          <p>No nutrition records match these filters.</p>
+          <button type="button" class="clear-filter-button" @click="clearHistoryFilters">Clear filters</button>
+        </div>
+
         <!-- Display each saved nutrition record. -->
         <div v-else class="history-list">
           <article
-            v-for="record in nutritionHistory"
+            v-for="record in filteredNutritionHistory"
             :key="record.nutritionId"
             class="history-item"
           >
@@ -424,6 +445,9 @@ const foods = ref([])
 
 // Store nutrition records loaded from the backend.
 const nutritionHistory = ref([])
+const historySearch = ref('')
+const historyDateFrom = ref('')
+const historyDateTo = ref('')
 
 const toLocalDate = (date) => {
   const year = date.getFullYear()
@@ -434,6 +458,38 @@ const toLocalDate = (date) => {
 }
 
 const today = computed(() => toLocalDate(new Date()))
+
+const sortedNutritionHistory = computed(() =>
+  [...nutritionHistory.value].sort((a, b) =>
+    String(b.date ?? '').localeCompare(String(a.date ?? '')),
+  ),
+)
+
+const filteredNutritionHistory = computed(() => {
+  const search = historySearch.value.trim().toLowerCase()
+
+  return sortedNutritionHistory.value.filter((record) => {
+    const matchesSearch =
+      !search ||
+      (record.foods ?? []).some((food) =>
+        String(food.foodName ?? '').toLowerCase().includes(search),
+      )
+    const matchesStart = !historyDateFrom.value || record.date >= historyDateFrom.value
+    const matchesEnd = !historyDateTo.value || record.date <= historyDateTo.value
+
+    return matchesSearch && matchesStart && matchesEnd
+  })
+})
+
+const hasHistoryFilters = computed(() =>
+  Boolean(historySearch.value || historyDateFrom.value || historyDateTo.value),
+)
+
+const clearHistoryFilters = () => {
+  historySearch.value = ''
+  historyDateFrom.value = ''
+  historyDateTo.value = ''
+}
 
 const savedFoodsToday = computed(() =>
   nutritionHistory.value
@@ -1324,6 +1380,24 @@ const deleteNutrition = async (nutritionId) => {
   gap: 14px;
 }
 
+.history-filters {
+  margin: 18px 0 8px;
+  padding: 16px;
+  border: 1px solid #dfe8e2;
+  border-radius: 14px;
+  background: #f7faf8;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(145px, .55fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.history-filters label { display: flex; flex-direction: column; gap: 7px; color: #52615d; font-size: .88rem; font-weight: 750; }
+.history-filters input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #172033; font: inherit; }
+.history-filters input:focus { outline: 3px solid rgba(203, 237, 99, .32); border-color: #7da23a; }
+.history-filters button, .clear-filter-button { min-height: 44px; padding: 10px 15px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #315e51; font: inherit; font-weight: 750; cursor: pointer; }
+.history-filters button:hover, .clear-filter-button:hover { background: #eaf4c7; }
+
 .history-item {
   padding: 20px;
   background: #f7f8f9;
@@ -1571,6 +1645,9 @@ const deleteNutrition = async (nutritionId) => {
   .add-button {
     grid-column: 1 / -1;
   }
+
+  .history-filters { grid-template-columns: 1fr 1fr; }
+  .history-search { grid-column: 1 / -1; }
 }
 
 @media (max-width: 900px) {
@@ -1636,5 +1713,8 @@ const deleteNutrition = async (nutritionId) => {
   .edit-food-grid input[aria-label='Food name'] {
     grid-column: 1 / -1;
   }
+
+  .history-filters { grid-template-columns: 1fr; }
+  .history-search { grid-column: auto; }
 }
 </style>

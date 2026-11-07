@@ -60,6 +60,9 @@ const editingWorkoutId = ref('')
 const editWorkoutDraft = ref(null)
 const isUpdatingWorkout = ref(false)
 const todayPlan = ref(null)
+const historySearch = ref('')
+const historyDateFrom = ref('')
+const historyDateTo = ref('')
 const isPlanWorkout = computed(() => route.query.fromPlan === '1' && Boolean(todayPlan.value))
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 const sortedWorkouts = computed(() =>
@@ -67,6 +70,32 @@ const sortedWorkouts = computed(() =>
     String(b.date ?? '').localeCompare(String(a.date ?? '')),
   ),
 )
+
+const filteredWorkouts = computed(() => {
+  const search = historySearch.value.trim().toLowerCase()
+
+  return sortedWorkouts.value.filter((workout) => {
+    const matchesSearch =
+      !search ||
+      (workout.exercises ?? []).some((item) =>
+        `${item.exercise ?? ''} ${item.muscleGroup ?? ''}`.toLowerCase().includes(search),
+      )
+    const matchesStart = !historyDateFrom.value || workout.date >= historyDateFrom.value
+    const matchesEnd = !historyDateTo.value || workout.date <= historyDateTo.value
+
+    return matchesSearch && matchesStart && matchesEnd
+  })
+})
+
+const hasHistoryFilters = computed(() =>
+  Boolean(historySearch.value || historyDateFrom.value || historyDateTo.value),
+)
+
+const clearHistoryFilters = () => {
+  historySearch.value = ''
+  historyDateFrom.value = ''
+  historyDateTo.value = ''
+}
 
 const recentExercisePresets = computed(() => {
   const seen = new Set()
@@ -625,8 +654,24 @@ onMounted(() => {
             </div>
 
             <span class="history-count">
-              {{ workouts.length }}
+              {{ filteredWorkouts.length }}{{ hasHistoryFilters ? ` of ${workouts.length}` : '' }}
             </span>
+          </div>
+
+          <div v-if="workouts.length" class="history-filters" aria-label="Filter workout history">
+            <label class="history-search">
+              <span>Search</span>
+              <input v-model="historySearch" type="search" placeholder="Exercise or muscle group" />
+            </label>
+            <label>
+              <span>From</span>
+              <input v-model="historyDateFrom" type="date" />
+            </label>
+            <label>
+              <span>To</span>
+              <input v-model="historyDateTo" type="date" />
+            </label>
+            <button v-if="hasHistoryFilters" type="button" @click="clearHistoryFilters">Clear</button>
           </div>
 
           <div
@@ -654,8 +699,13 @@ onMounted(() => {
             <p>No workouts found.</p>
           </div>
 
+          <div v-else-if="filteredWorkouts.length === 0" class="empty-state">
+            <p>No workouts match these filters.</p>
+            <button type="button" class="clear-filter-button" @click="clearHistoryFilters">Clear filters</button>
+          </div>
+
           <div
-            v-for="workout in sortedWorkouts"
+            v-for="workout in filteredWorkouts"
             :key="workout.workoutId"
             class="history-item"
           >
@@ -1196,6 +1246,24 @@ onMounted(() => {
   font-weight: 800;
 }
 
+.history-filters {
+  margin: 18px 0 8px;
+  padding: 16px;
+  border: 1px solid #dfe8e2;
+  border-radius: 14px;
+  background: #f7faf8;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(145px, .55fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.history-filters label { display: flex; flex-direction: column; gap: 7px; color: #52615d; font-size: .88rem; font-weight: 750; }
+.history-filters input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #172033; font: inherit; }
+.history-filters input:focus { outline: 3px solid rgba(203, 237, 99, .32); border-color: #7da23a; }
+.history-filters button, .clear-filter-button { min-height: 44px; padding: 10px 15px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #315e51; font: inherit; font-weight: 750; cursor: pointer; }
+.history-filters button:hover, .clear-filter-button:hover { background: #eaf4c7; }
+
 /* Exercises */
 
 .exercise-row,
@@ -1364,6 +1432,9 @@ onMounted(() => {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
+
+  .history-filters { grid-template-columns: 1fr 1fr; }
+  .history-search { grid-column: 1 / -1; }
 }
 
 @media (max-width: 650px) {
@@ -1400,5 +1471,7 @@ onMounted(() => {
   .coach-plan-banner a { grid-column: 1 / -1; text-align: center; }
   .edit-exercise-grid { grid-template-columns: 1fr 1fr; }
   .edit-exercise-grid input[aria-label="Exercise name"] { grid-column: 1 / -1; }
+  .history-filters { grid-template-columns: 1fr; }
+  .history-search { grid-column: auto; }
 }
 </style>
