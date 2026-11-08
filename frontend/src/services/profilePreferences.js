@@ -122,6 +122,20 @@ export const saveCurrentProfilePreferences = async (profile) => {
   }
 }
 
+export const deleteCurrentProfilePreferences = async () => {
+  const user = await getCurrentUser()
+  const response = await fetch(PROFILE_API_URL, {
+    method: 'DELETE',
+    headers: { Authorization: await getProfileAuthorization() },
+  })
+
+  if (!response.ok) {
+    throw new Error('Your cloud profile could not be deleted. Please try again.')
+  }
+
+  localStorage.removeItem(storageKey(user.username))
+}
+
 export const applyCurrentGoalUpdate = async (action) => {
   if (action?.type !== 'update_profile_goals') {
     throw new Error('This goal update is not valid.')

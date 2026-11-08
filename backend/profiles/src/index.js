@@ -1,5 +1,10 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import {
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  GetCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb'
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}))
 const tableName = process.env.PROFILES_TABLE || 'RepVeltaProfiles'
@@ -7,7 +12,7 @@ const tableName = process.env.PROFILES_TABLE || 'RepVeltaProfiles'
 const headers = {
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
   'Access-Control-Allow-Headers': 'authorization,content-type',
-  'Access-Control-Allow-Methods': 'OPTIONS,GET,PUT',
+  'Access-Control-Allow-Methods': 'OPTIONS,DELETE,GET,PUT',
   'Content-Type': 'application/json',
 }
 
@@ -93,6 +98,14 @@ export const handler = async (event) => {
       )
 
       return response(200, { profile: result.Attributes })
+    }
+
+    if (method === 'DELETE') {
+      await dynamo.send(
+        new DeleteCommand({ TableName: tableName, Key: { userId } }),
+      )
+
+      return response(200, { deleted: true })
     }
 
     return response(405, { message: 'Method not allowed.' })

@@ -5,6 +5,7 @@ import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import {
+  deleteCurrentProfilePreferences,
   loadCurrentProfilePreferences,
   loadProfilePreferences,
   saveCurrentProfilePreferences,
@@ -40,6 +41,7 @@ const pageError = ref('')
 const isLoading = ref(true)
 const isSavingProfile = ref(false)
 const isSavingPassword = ref(false)
+const isDeletingAccount = ref(false)
 
 const loadAccount = async () => {
   isLoading.value = true
@@ -168,12 +170,17 @@ const handleDeleteAccount = async () => {
 
   if (!confirmed) return
 
+  isDeletingAccount.value = true
+  pageError.value = ''
+
   try {
+    await deleteCurrentProfilePreferences()
     await deleteUser()
-    localStorage.removeItem(`repvelta-profile-${username.value || 'member'}`)
     router.push('/register')
   } catch (error) {
     pageError.value = error.message || 'We could not delete your account.'
+  } finally {
+    isDeletingAccount.value = false
   }
 }
 
@@ -339,9 +346,16 @@ onBeforeUnmount(() => {
             <div>
               <p class="eyebrow">DANGER ZONE</p>
               <h2>Delete account</h2>
-              <p>Permanently delete your Cognito account and sign-in access. Your account cannot be restored after deletion.</p>
+              <p>Permanently delete your cloud profile, Cognito account, and sign-in access. Your account cannot be restored after deletion.</p>
             </div>
-            <button type="button" class="danger-button" @click="handleDeleteAccount">Delete my account</button>
+            <button
+              type="button"
+              class="danger-button"
+              :disabled="isDeletingAccount"
+              @click="handleDeleteAccount"
+            >
+              {{ isDeletingAccount ? 'Deleting...' : 'Delete my account' }}
+            </button>
           </section>
         </section>
       </template>
@@ -405,6 +419,7 @@ onBeforeUnmount(() => {
 .danger-card > div > p:last-child { margin: 0; color: #6f5f5d; font-size: 1rem; }
 .danger-button { flex: 0 0 auto; padding: 13px 18px; border: 1px solid #c74435; border-radius: 12px; background: #fff; color: #a52b20; font-size: 1rem; font-weight: 800; cursor: pointer; }
 .danger-button:hover { background: #fff0ee; }
+.danger-button:disabled { opacity: .6; cursor: wait; }
 @media (max-width: 1000px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } }
 @media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .topbar { align-items: flex-start; } .back-link { display: none; } .goal-grid { grid-template-columns: 1fr; } .danger-card { align-items: flex-start; flex-direction: column; } .danger-button { width: 100%; } }
 </style>
