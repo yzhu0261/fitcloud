@@ -212,6 +212,10 @@
           {{ mealActionNotice }}
         </p>
 
+        <p v-if="nutritionDraftNotice" class="draft-notice" aria-live="polite">
+          {{ nutritionDraftNotice }}
+        </p>
+
         <div v-if="foods.length === 0" class="empty-state">
           <p>No food added yet.</p>
           <span>Add your first meal using the form above.</span>
@@ -440,13 +444,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchAuthSession, signOut } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import { loadCurrentProfilePreferences } from '../services/profilePreferences'
+import {
+  clearActivityDraft,
+  getActivityDraftKey,
+  loadActivityDraft,
+  saveActivityDraft,
+} from '../services/activityDrafts'
 
 const router = useRouter()
 
@@ -472,6 +482,8 @@ const dailyCalorieGoal = ref(2000)
 // Store food records added to today's meals.
 const foods = ref([])
 const editingPendingFoodIndex = ref(-1)
+const nutritionDraftKey = ref('')
+const nutritionDraftNotice = ref('')
 
 // Store nutrition records loaded from the backend.
 const nutritionHistory = ref([])
@@ -866,8 +878,49 @@ const loadNutrition = async () => {
   }
 }
 
+const initializeNutritionDraft = async () => {
+  try {
+    const key = await getActivityDraftKey('nutrition')
+    const draft = loadActivityDraft(key)
+
+    nutritionDraftKey.value = key
+
+    if (foods.value.length) {
+      saveActivityDraft(key, { foods: foods.value })
+      return
+    }
+
+    if (Array.isArray(draft?.foods) && draft.foods.length) {
+      foods.value = draft.foods.map((food) => ({ ...food }))
+      nutritionDraftNotice.value = 'Your unsaved nutrition draft was restored on this device.'
+    }
+  } catch {
+    nutritionDraftKey.value = ''
+  }
+}
+
+watch(
+  foods,
+  (currentFoods) => {
+    if (!nutritionDraftKey.value) return
+
+    if (currentFoods.length) {
+      const saved = saveActivityDraft(nutritionDraftKey.value, { foods: currentFoods })
+
+      if (saved && !nutritionDraftNotice.value) {
+        nutritionDraftNotice.value = 'Today’s pending meals are saved automatically on this device.'
+      }
+    } else {
+      clearActivityDraft(nutritionDraftKey.value)
+      nutritionDraftNotice.value = ''
+    }
+  },
+  { deep: true },
+)
+
 // Load saved nutrition records when the Nutrition page opens.
 onMounted(() => {
+  initializeNutritionDraft()
   loadNutrition()
   loadCalorieGoal()
 })
@@ -909,6 +962,8 @@ const saveNutrition = async () => {
     foods.value = []
     editingPendingFoodIndex.value = -1
     mealActionNotice.value = ''
+    clearActivityDraft(nutritionDraftKey.value)
+    nutritionDraftNotice.value = ''
     await loadNutrition()
   } catch (error) {
     formError.value = error.message || 'Your nutrition could not be saved.'
@@ -1514,6 +1569,17 @@ const deleteNutrition = async (nutritionId) => {
   color: #315e51;
   font-size: .95rem;
   font-weight: 700;
+  line-height: 1.45;
+}
+
+.draft-notice {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #dce6df;
+  border-radius: 10px;
+  background: #f5f8f6;
+  color: #5d6f68;
+  font-size: .9rem;
   line-height: 1.45;
 }
 

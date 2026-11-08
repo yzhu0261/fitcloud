@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { RouterLink, useRoute } from 'vue-router'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
@@ -11,6 +11,12 @@ import {
   loadWeeklyPlan,
   updateWeeklyPlanDay,
 } from '../services/weeklyPlan'
+import {
+  clearActivityDraft,
+  getActivityDraftKey,
+  loadActivityDraft,
+  saveActivityDraft,
+} from '../services/activityDrafts'
 
 const route = useRoute()
 
@@ -98,6 +104,8 @@ const historySearch = ref('')
 const historyDateFrom = ref('')
 const historyDateTo = ref('')
 const historyActionNotice = ref('')
+const workoutDraftKey = ref('')
+const workoutDraftNotice = ref('')
 const isPlanWorkout = computed(() => route.query.fromPlan === '1' && Boolean(todayPlan.value))
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 const sortedWorkouts = computed(() =>
@@ -316,6 +324,8 @@ const saveWorkout = async () => {
 
     exercises.value = []
     templateNotice.value = ''
+    clearActivityDraft(workoutDraftKey.value)
+    workoutDraftNotice.value = ''
     await loadWorkouts()
 
     if (isPlanWorkout.value && !todayPlan.value.completed) {
@@ -480,7 +490,48 @@ const updateWorkout = async () => {
   }
 }
 
+const initializeWorkoutDraft = async () => {
+  try {
+    const key = await getActivityDraftKey('workout')
+    const draft = loadActivityDraft(key)
+
+    workoutDraftKey.value = key
+
+    if (exercises.value.length) {
+      saveActivityDraft(key, { exercises: exercises.value })
+      return
+    }
+
+    if (Array.isArray(draft?.exercises) && draft.exercises.length) {
+      exercises.value = draft.exercises.map((item) => ({ ...item }))
+      workoutDraftNotice.value = 'Your unsaved workout draft was restored on this device.'
+    }
+  } catch {
+    workoutDraftKey.value = ''
+  }
+}
+
+watch(
+  exercises,
+  (currentExercises) => {
+    if (!workoutDraftKey.value) return
+
+    if (currentExercises.length) {
+      const saved = saveActivityDraft(workoutDraftKey.value, { exercises: currentExercises })
+
+      if (saved && !workoutDraftNotice.value) {
+        workoutDraftNotice.value = 'This workout draft is saved automatically on this device.'
+      }
+    } else {
+      clearActivityDraft(workoutDraftKey.value)
+      workoutDraftNotice.value = ''
+    }
+  },
+  { deep: true },
+)
+
 onMounted(() => {
+  initializeWorkoutDraft()
   loadWorkouts()
   loadWeeklyPlan().then((plan) => {
     weeklyPlan.value = plan
@@ -742,6 +793,10 @@ onMounted(() => {
 
           <p v-if="historyActionNotice" class="history-action-notice" aria-live="polite">
             {{ historyActionNotice }}
+          </p>
+
+          <p v-if="workoutDraftNotice" class="draft-notice" aria-live="polite">
+            {{ workoutDraftNotice }}
           </p>
 
           <div
@@ -1576,6 +1631,7 @@ onMounted(() => {
 .history-filters button, .clear-filter-button { min-height: 44px; padding: 10px 15px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #315e51; font: inherit; font-weight: 750; cursor: pointer; }
 .history-filters button:hover, .clear-filter-button:hover { background: #eaf4c7; }
 .history-action-notice { margin: 0 0 14px; padding: 11px 13px; border-radius: 10px; background: #edf7d0; color: #315e51; font-size: .9rem; font-weight: 700; line-height: 1.45; }
+.draft-notice { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #dce6df; border-radius: 10px; background: #f5f8f6; color: #5d6f68; font-size: .88rem; line-height: 1.45; }
 
 /* Exercises */
 

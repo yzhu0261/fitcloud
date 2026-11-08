@@ -10,6 +10,7 @@ import {
   loadProfilePreferences,
   saveCurrentProfilePreferences,
 } from '../services/profilePreferences'
+import { clearCurrentUserActivityDrafts } from '../services/activityDrafts'
 import {
   deleteUser,
   fetchUserAttributes,
@@ -175,6 +176,7 @@ const handleDeleteAccount = async () => {
 
   try {
     await deleteCurrentProfilePreferences()
+    await clearCurrentUserActivityDrafts()
     await deleteUser()
     router.push('/register')
   } catch (error) {
