@@ -91,7 +91,7 @@
       </section>
 
       <!-- Add Food form. -->
-      <section class="content-card">
+      <section id="add-food" class="content-card">
         <div class="section-heading">
           <div>
             <p class="eyebrow">MEAL TRACKER</p>
@@ -149,13 +149,23 @@
             />
           </div>
 
-          <button
-            type="button"
-            class="add-button"
-            @click="addFood"
-          >
-            Add Food
-          </button>
+          <div class="food-form-actions">
+            <button
+              type="button"
+              class="add-button"
+              @click="addFood"
+            >
+              {{ editingPendingFoodIndex >= 0 ? 'Update Food' : 'Add Food' }}
+            </button>
+            <button
+              v-if="editingPendingFoodIndex >= 0"
+              type="button"
+              class="cancel-food-edit-button"
+              @click="cancelPendingFoodEdit"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
 
         <div class="food-suggestions">
@@ -227,22 +237,27 @@
               </p>
             </div>
 
-            <button
-              type="button"
-              class="remove-button"
-              @click="removeFood(index)"
-            >
-              Remove
-            </button>
+            <div class="meal-item-actions">
+              <button type="button" class="edit-meal-button" @click="startEditingPendingFood(index)">
+                Edit
+              </button>
+              <button
+                type="button"
+                class="remove-button"
+                @click="removeFood(index)"
+              >
+                Remove
+              </button>
+            </div>
           </article>
         </div>
 
         <button
           class="save-btn"
-          :disabled="foods.length === 0 || isSaving"
+          :disabled="foods.length === 0 || isSaving || editingPendingFoodIndex >= 0"
           @click="saveNutrition"
         >
-          {{ isSaving ? 'Saving…' : 'Save Nutrition' }}
+          {{ isSaving ? 'Saving…' : editingPendingFoodIndex >= 0 ? 'Update the food above first' : 'Save Nutrition' }}
         </button>
 
         <p v-if="saveMessage" class="save-message">
@@ -456,6 +471,7 @@ const dailyCalorieGoal = ref(2000)
 
 // Store food records added to today's meals.
 const foods = ref([])
+const editingPendingFoodIndex = ref(-1)
 
 // Store nutrition records loaded from the backend.
 const nutritionHistory = ref([])
@@ -652,24 +668,31 @@ const addFood = () => {
   // Clear the previous save message when starting a new nutrition record.
   saveMessage.value = ''
 
-  if (
-    !foodName.value ||
-    calories.value === '' ||
-    protein.value === '' ||
-    carbs.value === '' ||
-    fat.value === ''
-  ) {
-    formError.value = 'Please complete all fields.'
+  const nutrientValues = [calories.value, protein.value, carbs.value, fat.value]
+  const hasInvalidNutrients = nutrientValues.some(
+    (value) => value === '' || !Number.isFinite(Number(value)) || Number(value) < 0,
+  )
+
+  if (!String(foodName.value).trim() || hasInvalidNutrients) {
+    formError.value = 'Enter a food name and valid nutrition values of 0 or more.'
     return
   }
 
-  foods.value.push({
-    foodName: foodName.value,
-    calories: calories.value,
-    protein: protein.value,
-    carbs: carbs.value,
-    fat: fat.value,
-  })
+  const pendingFood = {
+    foodName: String(foodName.value).trim(),
+    calories: Number(calories.value),
+    protein: Number(protein.value),
+    carbs: Number(carbs.value),
+    fat: Number(fat.value),
+  }
+
+  if (editingPendingFoodIndex.value >= 0) {
+    foods.value.splice(editingPendingFoodIndex.value, 1, pendingFood)
+    mealActionNotice.value = `${pendingFood.foodName} was updated in today’s pending meals.`
+    editingPendingFoodIndex.value = -1
+  } else {
+    foods.value.push(pendingFood)
+  }
 
   // Clear the form after adding the food.
   foodName.value = ''
@@ -679,9 +702,42 @@ const addFood = () => {
   fat.value = ''
 }
 
+const startEditingPendingFood = (index) => {
+  const pendingFood = foods.value[index]
+
+  if (!pendingFood) return
+
+  editingPendingFoodIndex.value = index
+  foodName.value = pendingFood.foodName
+  calories.value = pendingFood.calories
+  protein.value = pendingFood.protein
+  carbs.value = pendingFood.carbs
+  fat.value = pendingFood.fat
+  formError.value = ''
+  requestAnimationFrame(() => {
+    document.getElementById('add-food')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+const cancelPendingFoodEdit = () => {
+  editingPendingFoodIndex.value = -1
+  foodName.value = ''
+  calories.value = ''
+  protein.value = ''
+  carbs.value = ''
+  fat.value = ''
+  formError.value = ''
+}
+
 // Remove a food record from today's meals.
 const removeFood = (index) => {
   foods.value.splice(index, 1)
+
+  if (editingPendingFoodIndex.value === index) {
+    cancelPendingFoodEdit()
+  } else if (editingPendingFoodIndex.value > index) {
+    editingPendingFoodIndex.value -= 1
+  }
 }
 
 const startEditingNutrition = (record) => {
@@ -851,6 +907,7 @@ const saveNutrition = async () => {
 
     saveMessage.value = 'Nutrition saved successfully!'
     foods.value = []
+    editingPendingFoodIndex.value = -1
     mealActionNotice.value = ''
     await loadNutrition()
   } catch (error) {
@@ -1304,16 +1361,32 @@ const deleteNutrition = async (nutritionId) => {
   white-space: nowrap;
 }
 
-.add-button {
+.food-form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.add-button,
+.cancel-food-edit-button {
   border: none;
-  background: #cbed63;
-  color: #17352c;
   min-height: 52px;
   padding: 13px 20px;
   border-radius: 12px;
+  font: inherit;
   font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
+}
+
+.add-button {
+  background: #cbed63;
+  color: #17352c;
+}
+
+.cancel-food-edit-button {
+  border: 1px solid #d5ddd8;
+  background: #fff;
+  color: #52615d;
 }
 
 .form-error {
@@ -1369,6 +1442,28 @@ const deleteNutrition = async (nutritionId) => {
   font-size: 1.15rem;
 }
 
+.meal-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.edit-meal-button,
+.remove-button {
+  border: none;
+  background: #ffffff;
+  padding: 10px 15px;
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.edit-meal-button {
+  border: 1px solid #cbd9d0;
+  color: #315e51;
+}
+
 .meal-calories {
   margin: 0 0 5px;
   font-weight: 700;
@@ -1382,13 +1477,7 @@ const deleteNutrition = async (nutritionId) => {
 }
 
 .remove-button {
-  border: none;
-  background: #ffffff;
-  padding: 10px 15px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.95rem;
+  color: #a43a30;
 }
 
 .save-btn {
@@ -1709,7 +1798,7 @@ const deleteNutrition = async (nutritionId) => {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .add-button {
+  .food-form-actions {
     grid-column: 1 / -1;
   }
 
@@ -1739,6 +1828,28 @@ const deleteNutrition = async (nutritionId) => {
 
   .main-content {
     padding: 24px 16px 40px;
+  }
+
+  .food-form-actions {
+    flex-direction: column;
+  }
+
+  .food-form-actions button {
+    width: 100%;
+  }
+
+  .meal-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .meal-item-actions {
+    width: 100%;
+  }
+
+  .meal-item-actions button {
+    flex: 1;
   }
 
   .calorie-goal-card {
