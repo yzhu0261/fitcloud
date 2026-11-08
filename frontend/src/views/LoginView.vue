@@ -16,6 +16,15 @@ const router = useRouter()
 const route = useRoute()
 const registrationComplete = computed(() => route.query.verified === 'true')
 const passwordResetComplete = computed(() => route.query.reset === 'true')
+const loginDestination = computed(() => {
+  const redirect = Array.isArray(route.query.redirect)
+    ? route.query.redirect[0]
+    : route.query.redirect
+
+  return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
+    ? redirect
+    : '/dashboard'
+})
 
 const handleLogin = async () => {
   emailError.value = ''
@@ -45,7 +54,7 @@ const handleLogin = async () => {
     })
 
     if (result.isSignedIn) {
-      await router.push('/dashboard')
+      await router.push(loginDestination.value)
       return
     }
 

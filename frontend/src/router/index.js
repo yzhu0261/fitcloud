@@ -24,16 +24,25 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: LoginView,
+      meta: {
+        guestOnly: true,
+      },
     },
     {
       path: '/register',
       name: 'register',
       component: RegisterView,
+      meta: {
+        guestOnly: true,
+      },
     },
     {
       path: '/forgot-password',
       name: 'forgot-password',
       component: () => import('../views/ForgotPasswordView.vue'),
+      meta: {
+        guestOnly: true,
+      },
     },
     {
       path: '/dashboard',
@@ -91,16 +100,30 @@ const router = createRouter({
         requiresAuth: true,
       },
     },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFoundView.vue'),
+    },
   ],
 })
 
 router.beforeEach(async (to) => {
-  if (to.meta.requiresAuth) {
-    try {
-      await getCurrentUser()
-    } catch {
-      return '/login'
+  if (!to.meta.requiresAuth && !to.meta.guestOnly) return
+
+  const isAuthenticated = await getCurrentUser()
+    .then(() => true)
+    .catch(() => false)
+
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    return {
+      name: 'login',
+      query: { redirect: to.fullPath },
     }
+  }
+
+  if (to.meta.guestOnly && isAuthenticated) {
+    return { name: 'dashboard' }
   }
 })
 
