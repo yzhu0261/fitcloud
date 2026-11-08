@@ -186,7 +186,7 @@
       </section>
 
       <!-- Display foods added to today's meals. -->
-      <section class="content-card meals-card">
+      <section id="todays-meals" class="content-card meals-card">
         <div class="section-heading">
           <div>
             <p class="eyebrow">TODAY</p>
@@ -197,6 +197,10 @@
             {{ foods.length }} {{ foods.length === 1 ? 'food' : 'foods' }}
           </span>
         </div>
+
+        <p v-if="mealActionNotice" class="meal-action-notice" aria-live="polite">
+          {{ mealActionNotice }}
+        </p>
 
         <div v-if="foods.length === 0" class="empty-state">
           <p>No food added yet.</p>
@@ -308,6 +312,15 @@
               <h3>{{ record.date }}</h3>
 
               <div class="history-actions">
+                <button
+                  v-if="editingNutritionId !== record.nutritionId"
+                  type="button"
+                  class="repeat-history-button"
+                  :disabled="Boolean(deletingNutritionId)"
+                  @click="repeatNutritionRecord(record)"
+                >
+                  Log again
+                </button>
                 <button
                   v-if="editingNutritionId !== record.nutritionId"
                   type="button"
@@ -449,6 +462,7 @@ const nutritionHistory = ref([])
 const historySearch = ref('')
 const historyDateFrom = ref('')
 const historyDateTo = ref('')
+const mealActionNotice = ref('')
 
 const toLocalDate = (date) => {
   const year = date.getFullYear()
@@ -527,6 +541,38 @@ const chooseFood = (preset) => {
   carbs.value = preset.carbs
   fat.value = preset.fat
   formError.value = ''
+}
+
+const repeatNutritionRecord = (record) => {
+  const recordFoods = Array.isArray(record.foods) ? record.foods : []
+
+  if (!recordFoods.length) {
+    mealActionNotice.value = 'This nutrition record does not contain any foods to copy.'
+    return
+  }
+
+  const copiedFoods = recordFoods
+    .filter((food) => String(food.foodName || '').trim())
+    .map((food) => ({
+      foodName: food.foodName,
+      calories: Number(food.calories) || 0,
+      protein: Number(food.protein) || 0,
+      carbs: Number(food.carbs) || 0,
+      fat: Number(food.fat) || 0,
+    }))
+
+  if (!copiedFoods.length) {
+    mealActionNotice.value = 'This nutrition record does not contain any valid foods to copy.'
+    return
+  }
+
+  foods.value.push(...copiedFoods)
+  formError.value = ''
+  saveMessage.value = ''
+  mealActionNotice.value = `${copiedFoods.length} food${copiedFoods.length === 1 ? '' : 's'} copied to today’s pending meals. Review the list before saving.`
+  requestAnimationFrame(() => {
+    document.getElementById('todays-meals')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 // Calculate the total nutrition values from today's food records.
@@ -805,6 +851,7 @@ const saveNutrition = async () => {
 
     saveMessage.value = 'Nutrition saved successfully!'
     foods.value = []
+    mealActionNotice.value = ''
     await loadNutrition()
   } catch (error) {
     formError.value = error.message || 'Your nutrition could not be saved.'
@@ -1370,6 +1417,17 @@ const deleteNutrition = async (nutritionId) => {
   font-weight: 650;
 }
 
+.meal-action-notice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: #edf7d0;
+  color: #315e51;
+  font-size: .95rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 /* Nutrition history */
 .history-list {
   display: flex;
@@ -1433,6 +1491,7 @@ const deleteNutrition = async (nutritionId) => {
   gap: 8px;
 }
 
+.repeat-history-button,
 .edit-history-button,
 .delete-history-button {
   border: 1px solid #d7e1da;
@@ -1442,6 +1501,16 @@ const deleteNutrition = async (nutritionId) => {
   cursor: pointer;
   font-weight: 700;
   font-size: 0.95rem;
+}
+
+.repeat-history-button {
+  border-color: #bad552;
+  background: #eef8c9;
+  color: #315e51;
+}
+
+.repeat-history-button:hover:not(:disabled) {
+  background: #e2f58b;
 }
 
 .edit-history-button {
@@ -1454,6 +1523,7 @@ const deleteNutrition = async (nutritionId) => {
   color: #a43a30;
 }
 
+.repeat-history-button:disabled,
 .delete-history-button:disabled {
   cursor: wait;
   opacity: 0.55;
