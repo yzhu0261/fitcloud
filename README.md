@@ -93,9 +93,10 @@ must use the existing Cognito JWT authorizer.
 ## Cloud profile preferences
 
 `backend/profiles` contains the authenticated `GET /profile`, `PUT /profile`,
-and `DELETE /profile`
-handler used to sync display names, weekly workout goals, and daily calorie goals
-across devices and remove profile data before account deletion. Create an
+and `DELETE /profile` handler used to sync display names, weekly workout goals,
+and daily calorie goals across devices. The delete operation removes the user's
+profile, workout, nutrition, and weekly-plan records before Cognito account
+deletion. Create an
 on-demand DynamoDB table named `RepVeltaProfiles` with
 `userId` (String) as its partition key, then deploy the handler as a Node.js 20
 or later Lambda using `index.handler`.
@@ -103,10 +104,15 @@ or later Lambda using `index.handler`.
 Configure these environment variables:
 
 - `PROFILES_TABLE=RepVeltaProfiles`
+- `WORKOUTS_TABLE=FitCloudWorkouts`
+- `NUTRITION_TABLE=FitCloudNutrition`
+- `PLANS_TABLE_NAME=RepVeltaPlans`
 - `ALLOWED_ORIGIN=https://main.d4qy0pgoybda9.amplifyapp.com`
 
-Grant the Lambda role only `dynamodb:GetItem`, `dynamodb:UpdateItem`, and
-`dynamodb:DeleteItem` on the profiles table. Attach it to Cognito-protected API
+Grant the Lambda role `dynamodb:GetItem`, `dynamodb:UpdateItem`, and
+`dynamodb:DeleteItem` on the profiles table. For account cleanup, also grant
+`dynamodb:Query` and `dynamodb:BatchWriteItem` on `FitCloudWorkouts`,
+`FitCloudNutrition`, and `RepVeltaPlans`. Attach it to Cognito-protected API
 Gateway `GET /profile`, `PUT /profile`, and `DELETE /profile` routes. The frontend
 keeps a local fallback when the cloud profile API is unavailable. If another API endpoint is used, set
 `VITE_PROFILE_API_URL` in the frontend environment.

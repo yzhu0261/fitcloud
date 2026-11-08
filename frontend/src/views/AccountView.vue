@@ -165,7 +165,7 @@ const handleLogout = async () => {
 
 const handleDeleteAccount = async () => {
   const confirmed = window.confirm(
-    'Delete your RepVelta account permanently? This cannot be undone.',
+    'Delete your RepVelta account and all saved workouts, nutrition records, plans, and profile settings permanently? This cannot be undone.',
   )
 
   if (!confirmed) return
@@ -346,7 +346,7 @@ onBeforeUnmount(() => {
             <div>
               <p class="eyebrow">DANGER ZONE</p>
               <h2>Delete account</h2>
-              <p>Permanently delete your cloud profile, Cognito account, and sign-in access. Your account cannot be restored after deletion.</p>
+              <p>Permanently delete your profile, workouts, nutrition records, plans, Cognito account, and sign-in access. Your account cannot be restored after deletion.</p>
             </div>
             <button
               type="button"

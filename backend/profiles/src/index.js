@@ -1,13 +1,29 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import {
+  BatchWriteCommand,
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
+  QueryCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb'
 
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}))
 const tableName = process.env.PROFILES_TABLE || 'RepVeltaProfiles'
+const userDataTables = [
+  {
+    tableName: process.env.WORKOUTS_TABLE || 'FitCloudWorkouts',
+    sortKey: 'workoutId',
+  },
+  {
+    tableName: process.env.NUTRITION_TABLE || 'FitCloudNutrition',
+    sortKey: 'nutritionId',
+  },
+  {
+    tableName: process.env.PLANS_TABLE_NAME || 'RepVeltaPlans',
+    sortKey: 'planId',
+  },
+]
 
 const headers = {
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
@@ -29,6 +45,64 @@ const getUserId = (event) => {
     {}
 
   return claims.sub || ''
+}
+
+const chunk = (items, size) => {
+  const chunks = []
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+
+  return chunks
+}
+
+const deleteBatch = async (table, requests) => {
+  let pending = requests
+
+  for (let attempt = 0; pending.length && attempt < 5; attempt += 1) {
+    const result = await dynamo.send(
+      new BatchWriteCommand({ RequestItems: { [table]: pending } }),
+    )
+
+    pending = result.UnprocessedItems?.[table] || []
+  }
+
+  if (pending.length) {
+    throw new Error('Some records in ' + table + ' could not be deleted.')
+  }
+}
+
+const deleteUserTableItems = async (userId, table, sortKey) => {
+  let lastEvaluatedKey
+
+  do {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: table,
+        KeyConditionExpression: '#userId = :userId',
+        ExpressionAttributeNames: {
+          '#userId': 'userId',
+          '#sortKey': sortKey,
+        },
+        ExpressionAttributeValues: { ':userId': userId },
+        ProjectionExpression: '#userId, #sortKey',
+        ExclusiveStartKey: lastEvaluatedKey,
+      }),
+    )
+
+    const requests = (result.Items || []).map((item) => ({
+      DeleteRequest: {
+        Key: { userId: item.userId, [sortKey]: item[sortKey] },
+      },
+    }))
+
+    for (const batch of chunk(requests, 25)) {
+      await deleteBatch(table, batch)
+    }
+
+    lastEvaluatedKey = result.LastEvaluatedKey
+  } while (lastEvaluatedKey)
 }
 
 const normalizeProfile = (body) => {
@@ -101,11 +175,20 @@ export const handler = async (event) => {
     }
 
     if (method === 'DELETE') {
+      await Promise.all(
+        userDataTables.map(({ tableName: userTable, sortKey }) =>
+          deleteUserTableItems(userId, userTable, sortKey),
+        ),
+      )
+
       await dynamo.send(
         new DeleteCommand({ TableName: tableName, Key: { userId } }),
       )
 
-      return response(200, { deleted: true })
+      return response(200, {
+        deleted: true,
+        resources: ['profile', 'workouts', 'nutrition', 'plans'],
+      })
     }
 
     return response(405, { message: 'Method not allowed.' })
