@@ -97,6 +97,7 @@ const todayPlan = ref(null)
 const historySearch = ref('')
 const historyDateFrom = ref('')
 const historyDateTo = ref('')
+const historyActionNotice = ref('')
 const isPlanWorkout = computed(() => route.query.fromPlan === '1' && Boolean(todayPlan.value))
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 const sortedWorkouts = computed(() =>
@@ -183,6 +184,43 @@ const applyWorkoutTemplate = (template) => {
 
   exercises.value.push(...additions)
   templateNotice.value = `${additions.length} exercises added from ${template.title}. Adjust the weight for your level before saving.`
+}
+
+const repeatWorkout = (workout) => {
+  const workoutExercises = Array.isArray(workout.exercises) ? workout.exercises : []
+
+  if (!workoutExercises.length) {
+    historyActionNotice.value = 'This workout does not contain any exercises to copy.'
+    return
+  }
+
+  const existingExercises = new Set(
+    exercises.value.map((item) => String(item.exercise || '').trim().toLowerCase()),
+  )
+  const additions = workoutExercises
+    .filter((item) => {
+      const name = String(item.exercise || '').trim().toLowerCase()
+
+      if (!name || existingExercises.has(name)) return false
+      existingExercises.add(name)
+      return true
+    })
+    .map((item) => ({ ...item }))
+
+  formError.value = ''
+  saveNotice.value = ''
+  templateNotice.value = ''
+
+  if (!additions.length) {
+    historyActionNotice.value = 'Every exercise from this workout is already in the current session.'
+    return
+  }
+
+  exercises.value.push(...additions)
+  historyActionNotice.value = `${additions.length} exercise${additions.length === 1 ? '' : 's'} copied to the current session. Review the details before saving.`
+  requestAnimationFrame(() => {
+    document.getElementById('current-session')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 const addExercise = () => {
@@ -688,7 +726,7 @@ onMounted(() => {
       <!-- Session and History -->
       <section class="dashboard-grid">
         <!-- Current Session -->
-        <article class="content-card session-card">
+        <article id="current-session" class="content-card session-card">
           <div class="card-heading">
             <div>
               <h2>Current Session</h2>
@@ -701,6 +739,10 @@ onMounted(() => {
               Today
             </span>
           </div>
+
+          <p v-if="historyActionNotice" class="history-action-notice" aria-live="polite">
+            {{ historyActionNotice }}
+          </p>
 
           <div
             v-if="exercises.length === 0"
@@ -848,6 +890,7 @@ onMounted(() => {
                 {{ workout.date }}
               </div>
               <div v-if="editingWorkoutId !== workout.workoutId" class="history-actions">
+                <button type="button" class="repeat-workout-button" @click="repeatWorkout(workout)">Use again</button>
                 <button type="button" class="edit-workout-button" @click="startEditingWorkout(workout)">Edit</button>
                 <button
                   v-if="workoutPendingDelete !== workout.workoutId"
@@ -1532,6 +1575,7 @@ onMounted(() => {
 .history-filters input:focus { outline: 3px solid rgba(203, 237, 99, .32); border-color: #7da23a; }
 .history-filters button, .clear-filter-button { min-height: 44px; padding: 10px 15px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #315e51; font: inherit; font-weight: 750; cursor: pointer; }
 .history-filters button:hover, .clear-filter-button:hover { background: #eaf4c7; }
+.history-action-notice { margin: 0 0 14px; padding: 11px 13px; border-radius: 10px; background: #edf7d0; color: #315e51; font-size: .9rem; font-weight: 700; line-height: 1.45; }
 
 /* Exercises */
 
@@ -1701,6 +1745,8 @@ onMounted(() => {
 
 .history-item-heading { min-height: 34px; margin-bottom: 7px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .history-actions { display: flex; align-items: center; gap: 7px; }
+.repeat-workout-button { padding: 7px 10px; border: 1px solid #bad552; border-radius: 9px; background: #eef8c9; color: #315e51; font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; }
+.repeat-workout-button:hover { background: #e2f58b; }
 .edit-workout-button { padding: 7px 10px; border: 1px solid #bfd0c5; border-radius: 9px; background: #fff; color: #315e51; font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; }
 .delete-workout-button { padding: 7px 10px; border: 1px solid #e3c2bd; border-radius: 9px; background: #fff; color: #a43a30; font: inherit; font-size: .88rem; font-weight: 750; cursor: pointer; }
 .delete-workout-button:hover { background: #fff2ef; }
