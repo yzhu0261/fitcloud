@@ -40,6 +40,39 @@ const EXERCISE_LIBRARY = [
   { name: 'Hanging Knee Raise', group: 'core' },
 ]
 
+const WORKOUT_TEMPLATES = [
+  {
+    id: 'full-body',
+    title: 'Full body starter',
+    description: 'A balanced session covering the main movement patterns.',
+    exercises: [
+      { muscleGroup: 'legs', exercise: 'Back Squat', sets: 3, reps: 8, weight: 0 },
+      { muscleGroup: 'chest', exercise: 'Bench Press', sets: 3, reps: 10, weight: 0 },
+      { muscleGroup: 'back', exercise: 'Seated Cable Row', sets: 3, reps: 10, weight: 0 },
+    ],
+  },
+  {
+    id: 'upper-body',
+    title: 'Upper body',
+    description: 'Push, pull, and shoulder work for an efficient upper session.',
+    exercises: [
+      { muscleGroup: 'chest', exercise: 'Incline Dumbbell Press', sets: 3, reps: 10, weight: 0 },
+      { muscleGroup: 'back', exercise: 'Lat Pulldown', sets: 3, reps: 10, weight: 0 },
+      { muscleGroup: 'shoulders', exercise: 'Dumbbell Shoulder Press', sets: 3, reps: 10, weight: 0 },
+    ],
+  },
+  {
+    id: 'lower-body',
+    title: 'Lower body + core',
+    description: 'Leg strength with a short core finisher.',
+    exercises: [
+      { muscleGroup: 'legs', exercise: 'Leg Press', sets: 3, reps: 12, weight: 0 },
+      { muscleGroup: 'legs', exercise: 'Romanian Deadlift', sets: 3, reps: 10, weight: 0 },
+      { muscleGroup: 'core', exercise: 'Cable Crunch', sets: 3, reps: 12, weight: 0 },
+    ],
+  },
+]
+
 const muscleGroup = ref('')
 const exercise = ref('')
 const sets = ref('')
@@ -51,6 +84,7 @@ const workouts = ref([])
 const weeklyPlan = ref(null)
 const formError = ref('')
 const saveNotice = ref('')
+const templateNotice = ref('')
 const isSaving = ref(false)
 const isLoadingHistory = ref(true)
 const historyError = ref('')
@@ -131,6 +165,26 @@ const chooseExercise = (preset) => {
   formError.value = ''
 }
 
+const applyWorkoutTemplate = (template) => {
+  const existingExercises = new Set(
+    exercises.value.map((item) => String(item.exercise || '').trim().toLowerCase()),
+  )
+  const additions = template.exercises
+    .filter((item) => !existingExercises.has(item.exercise.toLowerCase()))
+    .map((item) => ({ ...item }))
+
+  formError.value = ''
+  saveNotice.value = ''
+
+  if (!additions.length) {
+    templateNotice.value = `${template.title} is already included in this session.`
+    return
+  }
+
+  exercises.value.push(...additions)
+  templateNotice.value = `${additions.length} exercises added from ${template.title}. Adjust the weight for your level before saving.`
+}
+
 const addExercise = () => {
   formError.value = ''
 
@@ -173,6 +227,26 @@ const saveWorkout = async () => {
     return
   }
 
+  const hasInvalidMetrics = exercises.value.some((item) => {
+    const itemSets = Number(item.sets)
+    const itemReps = Number(item.reps)
+    const itemWeight = Number(item.weight)
+
+    return (
+      !Number.isFinite(itemSets) ||
+      itemSets < 1 ||
+      !Number.isFinite(itemReps) ||
+      itemReps < 1 ||
+      !Number.isFinite(itemWeight) ||
+      itemWeight < 0
+    )
+  })
+
+  if (hasInvalidMetrics) {
+    formError.value = 'Each exercise needs at least 1 set and 1 rep, with a valid weight.'
+    return
+  }
+
   isSaving.value = true
 
   try {
@@ -203,6 +277,7 @@ const saveWorkout = async () => {
     }
 
     exercises.value = []
+    templateNotice.value = ''
     await loadWorkouts()
 
     if (isPlanWorkout.value && !todayPlan.value.completed) {
@@ -454,6 +529,37 @@ onMounted(() => {
         </article>
       </section>
 
+      <section class="template-section" aria-labelledby="workout-templates-heading">
+        <div class="template-heading">
+          <div>
+            <p>QUICK START</p>
+            <h2 id="workout-templates-heading">Choose a workout template</h2>
+            <span>Add a ready-made session, then adjust sets, reps, and weight as needed.</span>
+          </div>
+          <div class="template-heading-icon"><AppIcon name="workout" :size="24" /></div>
+        </div>
+
+        <div class="template-grid">
+          <article v-for="template in WORKOUT_TEMPLATES" :key="template.id" class="template-card">
+            <div>
+              <h3>{{ template.title }}</h3>
+              <p>{{ template.description }}</p>
+            </div>
+            <ul>
+              <li v-for="item in template.exercises" :key="item.exercise">
+                <span>{{ item.exercise }}</span>
+                <small>{{ item.sets }} × {{ item.reps }}</small>
+              </li>
+            </ul>
+            <button type="button" @click="applyWorkoutTemplate(template)">Add to session</button>
+          </article>
+        </div>
+
+        <p v-if="templateNotice" class="template-notice" aria-live="polite">
+          {{ templateNotice }}
+        </p>
+      </section>
+
       <!-- Add Exercise -->
       <section class="content-card add-card">
         <div class="card-heading">
@@ -619,11 +725,39 @@ onMounted(() => {
                 </span>
               </div>
 
-              <p>
-                {{ item.sets }} sets ×
-                {{ item.reps }} reps ·
-                {{ item.weight }} kg
-              </p>
+              <div class="session-metrics">
+                <label>
+                  <span>Sets</span>
+                  <input
+                    v-model.number="item.sets"
+                    type="number"
+                    min="1"
+                    :aria-label="`${item.exercise} sets`"
+                  />
+                </label>
+                <label>
+                  <span>Reps</span>
+                  <input
+                    v-model.number="item.reps"
+                    type="number"
+                    min="1"
+                    :aria-label="`${item.exercise} reps`"
+                  />
+                </label>
+                <label>
+                  <span>Weight</span>
+                  <span class="metric-input">
+                    <input
+                      v-model.number="item.weight"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      :aria-label="`${item.exercise} weight in kilograms`"
+                    />
+                    <small>kg</small>
+                  </span>
+                </label>
+              </div>
             </div>
 
             <button
@@ -1021,6 +1155,141 @@ onMounted(() => {
   background: #e2f58b;
 }
 
+/* Workout templates */
+
+.template-section {
+  margin-bottom: 24px;
+  padding: 26px;
+  border: 1px solid #dfe7e1;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f9fbf7 0%, #f2f7ee 100%);
+}
+
+.template-heading {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.template-heading p {
+  margin: 0 0 6px;
+  color: #5a766b;
+  font-size: .82rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+
+.template-heading h2 {
+  margin: 0 0 7px;
+  font-size: 1.45rem;
+}
+
+.template-heading span {
+  color: #68766f;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.template-heading-icon {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #e2f58b;
+  color: #17352c;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.template-card {
+  min-width: 0;
+  padding: 19px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #dce5df;
+  border-radius: 16px;
+  background: #fffefd;
+}
+
+.template-card h3 {
+  margin: 0 0 6px;
+  font-size: 1.08rem;
+}
+
+.template-card p {
+  margin: 0;
+  color: #718079;
+  font-size: .92rem;
+  line-height: 1.5;
+}
+
+.template-card ul {
+  margin: 16px 0 18px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+
+.template-card li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #365249;
+  font-size: .9rem;
+}
+
+.template-card small {
+  flex: 0 0 auto;
+  color: #718079;
+  font-size: .8rem;
+  font-weight: 750;
+}
+
+.template-card button {
+  width: 100%;
+  min-height: 44px;
+  margin-top: auto;
+  border: 1px solid #bad552;
+  border-radius: 11px;
+  background: #e2f58b;
+  color: #17352c;
+  font: inherit;
+  font-size: .94rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .2s ease, transform .2s ease;
+}
+
+.template-card button:hover {
+  background: #d5ee70;
+  transform: translateY(-1px);
+}
+
+.template-card button:focus-visible {
+  outline: 3px solid rgba(126, 162, 58, .3);
+  outline-offset: 2px;
+}
+
+.template-notice {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: #e6f0eb;
+  color: #315e51;
+  font-size: .94rem;
+  font-weight: 700;
+}
+
 /* Main cards */
 
 .content-card {
@@ -1279,6 +1548,11 @@ onMounted(() => {
   border-bottom: 1px solid #edf0f2;
 }
 
+.exercise-row > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
 .exercise-title {
   display: flex;
   align-items: center;
@@ -1296,6 +1570,67 @@ onMounted(() => {
   margin: 5px 0 0;
   color: #7d8693;
   font-size: 0.98rem;
+}
+
+.session-metrics {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.session-metrics label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #66746e;
+  font-size: .8rem;
+  font-weight: 750;
+}
+
+.session-metrics input {
+  width: 58px;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 1px solid #d6dfd9;
+  border-radius: 9px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-size: .9rem;
+}
+
+.session-metrics input:focus {
+  outline: 3px solid rgba(203, 237, 99, .32);
+  border-color: #7da23a;
+}
+
+.metric-input {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d6dfd9;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.metric-input:focus-within {
+  outline: 3px solid rgba(203, 237, 99, .32);
+  border-color: #7da23a;
+}
+
+.metric-input input {
+  border: 0;
+  border-radius: 9px 0 0 9px;
+}
+
+.metric-input input:focus {
+  outline: none;
+}
+
+.metric-input small {
+  padding-right: 8px;
+  color: #7d8984;
+  font-size: .75rem;
 }
 
 .muscle-badge {
@@ -1433,6 +1768,10 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .template-grid {
+    grid-template-columns: 1fr;
+  }
+
   .history-filters { grid-template-columns: 1fr 1fr; }
   .history-search { grid-column: 1 / -1; }
 }
@@ -1455,6 +1794,14 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
+  .template-section {
+    padding: 20px;
+  }
+
+  .template-heading-icon {
+    display: none;
+  }
+
   .suggestion-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -1465,6 +1812,15 @@ onMounted(() => {
     width: 100%;
     justify-content: space-between;
     border-radius: 11px;
+  }
+
+  .exercise-row {
+    align-items: flex-start;
+  }
+
+  .session-metrics {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .coach-plan-banner { grid-template-columns: auto 1fr; }
