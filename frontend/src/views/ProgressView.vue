@@ -65,6 +65,36 @@ const nutritionInRange = computed(() =>
   nutrition.value.filter((record) => !rangeStartDate.value || record.date >= rangeStartDate.value),
 )
 
+const previousRange = computed(() => {
+  if (selectedRange.value === 'all') return null
+
+  const days = Number(selectedRange.value)
+  const today = new Date(`${toLocalDate(new Date())}T00:00:00`)
+  const end = new Date(today)
+  end.setDate(today.getDate() - days)
+  const start = new Date(end)
+  start.setDate(end.getDate() - (days - 1))
+
+  return { start: toLocalDate(start), end: toLocalDate(end) }
+})
+
+const previousWorkouts = computed(() => {
+  if (!previousRange.value) return []
+
+  return workouts.value.filter(
+    (workout) =>
+      workout.date >= previousRange.value.start && workout.date <= previousRange.value.end,
+  )
+})
+
+const previousNutrition = computed(() => {
+  if (!previousRange.value) return []
+
+  return nutrition.value.filter(
+    (record) => record.date >= previousRange.value.start && record.date <= previousRange.value.end,
+  )
+})
+
 const sortedWorkouts = computed(() => {
   return [...workoutsInRange.value].sort((a, b) =>
     String(b.date ?? '').localeCompare(String(a.date ?? '')),
@@ -254,8 +284,8 @@ const trainingStreak = computed(() => {
   }
 })
 
-const totalVolume = computed(() => {
-  const volume = workoutsInRange.value.reduce((workoutTotal, workout) => {
+const calculateTrainingVolume = (workoutRecords) =>
+  workoutRecords.reduce((workoutTotal, workout) => {
     return (
       workoutTotal +
       (workout.exercises ?? []).reduce((exerciseTotal, exercise) => {
@@ -269,9 +299,58 @@ const totalVolume = computed(() => {
     )
   }, 0)
 
+const trainingVolumeValue = computed(() => calculateTrainingVolume(workoutsInRange.value))
+
+const totalVolume = computed(() => {
   return new Intl.NumberFormat('en-AU', { maximumFractionDigits: 0 }).format(
-    volume,
+    trainingVolumeValue.value,
   )
+})
+
+const previousTotalExercises = computed(() => {
+  return previousWorkouts.value.reduce(
+    (total, workout) => total + (workout.exercises?.length ?? 0),
+    0,
+  )
+})
+
+const previousTrainingVolume = computed(() => calculateTrainingVolume(previousWorkouts.value))
+
+const calculateAverageCalories = (nutritionRecords) => {
+  if (nutritionRecords.length === 0) return 0
+
+  const calories = nutritionRecords.reduce(
+    (total, record) => total + nutritionTotals(record).calories,
+    0,
+  )
+
+  return Math.round(calories / nutritionRecords.length)
+}
+
+const metricComparison = (current, previous) => {
+  if (current === previous) return { direction: 'flat', label: 'No change' }
+  if (previous === 0) return { direction: 'up', label: 'New this period' }
+
+  const percentage = Math.round((Math.abs(current - previous) / previous) * 100)
+
+  return {
+    direction: current > previous ? 'up' : 'down',
+    label: `${current > previous ? '↑' : '↓'} ${percentage}% vs previous`,
+  }
+}
+
+const summaryComparisons = computed(() => {
+  if (!previousRange.value) return null
+
+  return {
+    workouts: metricComparison(workoutsInRange.value.length, previousWorkouts.value.length),
+    exercises: metricComparison(totalExercises.value, previousTotalExercises.value),
+    volume: metricComparison(trainingVolumeValue.value, previousTrainingVolume.value),
+    calories: metricComparison(
+      averageCalories.value,
+      calculateAverageCalories(previousNutrition.value),
+    ),
+  }
 })
 
 const nutritionTotals = (record) => {
@@ -287,14 +366,7 @@ const nutritionTotals = (record) => {
 }
 
 const averageCalories = computed(() => {
-  if (nutritionInRange.value.length === 0) return 0
-
-  const calories = nutritionInRange.value.reduce(
-    (total, record) => total + nutritionTotals(record).calories,
-    0,
-  )
-
-  return Math.round(calories / nutritionInRange.value.length)
+  return calculateAverageCalories(nutritionInRange.value)
 })
 
 const displayedWorkouts = computed(() => {
@@ -585,15 +657,43 @@ onMounted(loadProgress)
         <section class="summary-grid">
           <article class="summary-card blue-card">
             <p>Total Workouts</p><strong>{{ workoutsInRange.length }}</strong><span>sessions completed</span>
+            <small
+              v-if="summaryComparisons"
+              class="metric-comparison"
+              :class="summaryComparisons.workouts.direction"
+            >
+              {{ summaryComparisons.workouts.label }}
+            </small>
           </article>
           <article class="summary-card yellow-card">
             <p>Total Exercises</p><strong>{{ totalExercises }}</strong><span>movements recorded</span>
+            <small
+              v-if="summaryComparisons"
+              class="metric-comparison"
+              :class="summaryComparisons.exercises.direction"
+            >
+              {{ summaryComparisons.exercises.label }}
+            </small>
           </article>
           <article class="summary-card lime-card">
             <p>Training Volume</p><strong>{{ totalVolume }}</strong><span>kg lifted in total</span>
+            <small
+              v-if="summaryComparisons"
+              class="metric-comparison"
+              :class="summaryComparisons.volume.direction"
+            >
+              {{ summaryComparisons.volume.label }}
+            </small>
           </article>
           <article class="summary-card pink-card">
             <p>Average Calories</p><strong>{{ averageCalories }}</strong><span>kcal per saved day</span>
+            <small
+              v-if="summaryComparisons"
+              class="metric-comparison"
+              :class="summaryComparisons.calories.direction"
+            >
+              {{ summaryComparisons.calories.label }}
+            </small>
           </article>
         </section>
 
@@ -870,10 +970,13 @@ onMounted(loadProgress)
 .profile strong { font-size: 1rem; }
 .profile p { margin: 3px 0 0; color: #66717f; font-size: .92rem; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 24px; }
-.summary-card { min-height: 180px; padding: 26px; border-radius: 20px; }
+.summary-card { min-height: 208px; padding: 26px; border-radius: 20px; }
 .summary-card p { margin: 0 0 21px; font-size: 1.02rem; font-weight: 750; }
 .summary-card strong { display: block; font-size: 3rem; line-height: 1; }
 .summary-card span { display: block; margin-top: 12px; color: #4f5c6b; font-size: .98rem; }
+.metric-comparison { width: fit-content; margin-top: 14px; padding: 6px 9px; display: block; border-radius: 999px; background: rgba(255, 255, 255, .55); color: #50605b; font-size: .78rem; font-weight: 800; }
+.metric-comparison.up { color: #315e38; }
+.metric-comparison.down { color: #8a4d33; }
 .blue-card { background: #dcefea; } .yellow-card { background: #fff1a8; } .lime-card { background: #e2f58b; } .pink-card { background: #f6dfe7; }
 .trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-bottom: 24px; }
 .trend-card { min-width: 0; padding: 26px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
