@@ -79,6 +79,14 @@ const WORKOUT_TEMPLATES = [
   },
 ]
 
+const toLocalDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
 const muscleGroup = ref('')
 const exercise = ref('')
 const sets = ref('')
@@ -106,7 +114,23 @@ const historyDateTo = ref('')
 const historyActionNotice = ref('')
 const workoutDraftKey = ref('')
 const workoutDraftNotice = ref('')
-const isPlanWorkout = computed(() => route.query.fromPlan === '1' && Boolean(todayPlan.value))
+const today = computed(() => toLocalDate(new Date()))
+const selectedWorkoutDate = ref(toLocalDate(new Date()))
+const isSelectedToday = computed(() => selectedWorkoutDate.value === today.value)
+const selectedDateLabel = computed(() => {
+  const parsed = new Date(`${selectedWorkoutDate.value}T00:00:00`)
+
+  if (Number.isNaN(parsed.getTime())) return selectedWorkoutDate.value
+
+  return new Intl.DateTimeFormat('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(parsed)
+})
+const isPlanWorkout = computed(
+  () => route.query.fromPlan === '1' && Boolean(todayPlan.value) && isSelectedToday.value,
+)
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 const sortedWorkouts = computed(() =>
   [...workouts.value].sort((a, b) =>
@@ -291,6 +315,11 @@ const saveWorkout = async () => {
   formError.value = ''
   saveNotice.value = ''
 
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedWorkoutDate.value) || selectedWorkoutDate.value > today.value) {
+    formError.value = 'Please choose today or an earlier date.'
+    return
+  }
+
   if (exercises.value.length === 0) {
     formError.value = 'Please add at least one exercise.'
     return
@@ -320,7 +349,7 @@ const saveWorkout = async () => {
 
   try {
     const workout = {
-      date: new Date().toISOString().split('T')[0],
+      date: selectedWorkoutDate.value,
       exercises: exercises.value,
     }
 
@@ -521,8 +550,16 @@ const initializeWorkoutDraft = async () => {
     workoutDraftKey.value = key
 
     if (exercises.value.length) {
-      saveActivityDraft(key, { exercises: exercises.value })
+      saveActivityDraft(key, { date: selectedWorkoutDate.value, exercises: exercises.value })
       return
+    }
+
+    if (
+      typeof draft?.date === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(draft.date) &&
+      draft.date <= today.value
+    ) {
+      selectedWorkoutDate.value = draft.date
     }
 
     if (Array.isArray(draft?.exercises) && draft.exercises.length) {
@@ -535,15 +572,18 @@ const initializeWorkoutDraft = async () => {
 }
 
 watch(
-  exercises,
-  (currentExercises) => {
+  [exercises, selectedWorkoutDate],
+  ([currentExercises, currentDate]) => {
     if (!workoutDraftKey.value) return
 
     if (currentExercises.length) {
-      const saved = saveActivityDraft(workoutDraftKey.value, { exercises: currentExercises })
+      const saved = saveActivityDraft(workoutDraftKey.value, {
+        date: currentDate,
+        exercises: currentExercises,
+      })
 
       if (saved && !workoutDraftNotice.value) {
-        workoutDraftNotice.value = 'This workout draft is saved automatically on this device.'
+        workoutDraftNotice.value = 'This workout draft and its date are saved automatically on this device.'
       }
     } else {
       clearActivityDraft(workoutDraftKey.value)
@@ -596,14 +636,20 @@ onMounted(() => {
     <section class="main-content">
       <header class="topbar">
         <div>
-          <h1>Today's Workout</h1>
-          <p>Build your session and track your training progress.</p>
+          <h1>{{ isSelectedToday ? "Today's Workout" : `Workout for ${selectedDateLabel}` }}</h1>
+          <p>{{ isSelectedToday ? 'Build your session and track your training progress.' : 'Add a training session you completed on a previous date.' }}</p>
         </div>
 
-        <UserProfileBadge />
+        <div class="topbar-tools">
+          <label class="log-date-control">
+            <span>Log date</span>
+            <input v-model="selectedWorkoutDate" type="date" :max="today" />
+          </label>
+          <UserProfileBadge />
+        </div>
       </header>
 
-      <section v-if="todayPlan" class="coach-plan-banner" :class="{ active: isPlanWorkout }">
+      <section v-if="todayPlan && isSelectedToday" class="coach-plan-banner" :class="{ active: isPlanWorkout }">
         <div class="coach-plan-mark"><AppIcon name="coach" :size="25" /></div>
         <div>
           <p>{{ isPlanWorkout ? 'PLAN WORKOUT ACTIVE' : 'REPVELTA COACH' }} · DAY {{ todayPlan.dayNumber }}</p>
@@ -633,11 +679,11 @@ onMounted(() => {
         </article>
 
         <article class="summary-card lime-card">
-          <p>Today's Focus</p>
+          <p>{{ isSelectedToday ? "Today's Focus" : 'Session Date' }}</p>
           <div class="summary-text">
-            {{ todayPlan ? `Plan Day ${todayPlan.dayNumber}` : 'Keep moving' }}
+            {{ isSelectedToday && todayPlan ? `Plan Day ${todayPlan.dayNumber}` : isSelectedToday ? 'Keep moving' : selectedDateLabel }}
           </div>
-          <span>{{ isPlanWorkout ? 'Plan-linked session' : 'One session at a time' }}</span>
+          <span>{{ isPlanWorkout ? 'Plan-linked session' : isSelectedToday ? 'One session at a time' : 'Historical workout entry' }}</span>
         </article>
       </section>
 
@@ -677,7 +723,7 @@ onMounted(() => {
         <div class="card-heading">
           <div>
             <h2>Add Exercise</h2>
-            <p>Add an exercise to today's training session.</p>
+            <p>Add an exercise to the selected training session.</p>
           </div>
 
           <div class="heading-icon">+</div>
@@ -811,7 +857,7 @@ onMounted(() => {
 
             <div class="session-heading-actions">
               <span class="session-badge">
-                Today
+                {{ isSelectedToday ? 'Today' : selectedDateLabel }}
               </span>
               <button
                 v-if="exercises.length"
@@ -1187,6 +1233,41 @@ onMounted(() => {
   margin: 7px 0 0;
   color: #7a8391;
   font-size: 1.1rem;
+}
+
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.log-date-control {
+  min-width: 175px;
+  padding: 8px 12px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #d9e1dc;
+  border-radius: 13px;
+  background: #fffefd;
+}
+
+.log-date-control span {
+  color: #68766f;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.log-date-control input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #17352c;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 750;
 }
 
 .profile {
@@ -1941,6 +2022,12 @@ onMounted(() => {
 
   .topbar {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topbar-tools,
+  .log-date-control {
+    width: 100%;
   }
 
   .profile {
