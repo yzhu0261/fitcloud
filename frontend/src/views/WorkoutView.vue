@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { RouterLink, useRoute } from 'vue-router'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
@@ -79,6 +79,8 @@ const WORKOUT_TEMPLATES = [
   },
 ]
 
+const REST_DURATIONS = [60, 90, 120]
+
 const muscleGroup = ref('')
 const exercise = ref('')
 const sets = ref('')
@@ -106,6 +108,10 @@ const historyDateTo = ref('')
 const historyActionNotice = ref('')
 const workoutDraftKey = ref('')
 const workoutDraftNotice = ref('')
+const restDuration = ref(90)
+const restRemaining = ref(90)
+const isRestTimerRunning = ref(false)
+let restTimerId = null
 const isPlanWorkout = computed(() => route.query.fromPlan === '1' && Boolean(todayPlan.value))
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 const sortedWorkouts = computed(() =>
@@ -129,6 +135,54 @@ const filteredWorkouts = computed(() => {
     return matchesSearch && matchesStart && matchesEnd
   })
 })
+
+const formattedRestTime = computed(() => {
+  const minutes = Math.floor(restRemaining.value / 60)
+  const seconds = String(restRemaining.value % 60).padStart(2, '0')
+
+  return `${minutes}:${seconds}`
+})
+
+const stopRestTimer = () => {
+  if (restTimerId !== null) {
+    window.clearInterval(restTimerId)
+    restTimerId = null
+  }
+
+  isRestTimerRunning.value = false
+}
+
+const setRestDuration = (seconds) => {
+  stopRestTimer()
+  restDuration.value = seconds
+  restRemaining.value = seconds
+}
+
+const toggleRestTimer = () => {
+  if (isRestTimerRunning.value) {
+    stopRestTimer()
+    return
+  }
+
+  if (restRemaining.value <= 0) {
+    restRemaining.value = restDuration.value
+  }
+
+  isRestTimerRunning.value = true
+  restTimerId = window.setInterval(() => {
+    restRemaining.value -= 1
+
+    if (restRemaining.value <= 0) {
+      restRemaining.value = 0
+      stopRestTimer()
+    }
+  }, 1000)
+}
+
+const resetRestTimer = () => {
+  stopRestTimer()
+  restRemaining.value = restDuration.value
+}
 
 const hasHistoryFilters = computed(() =>
   Boolean(historySearch.value || historyDateFrom.value || historyDateTo.value),
@@ -285,6 +339,7 @@ const clearCurrentSession = () => {
   historyActionNotice.value = ''
   workoutDraftNotice.value = ''
   clearActivityDraft(workoutDraftKey.value)
+  resetRestTimer()
 }
 
 const saveWorkout = async () => {
@@ -349,6 +404,7 @@ const saveWorkout = async () => {
     templateNotice.value = ''
     clearActivityDraft(workoutDraftKey.value)
     workoutDraftNotice.value = ''
+    resetRestTimer()
     await loadWorkouts()
 
     if (isPlanWorkout.value && !todayPlan.value.completed) {
@@ -561,6 +617,8 @@ onMounted(() => {
     todayPlan.value = getTodayPlanDay(plan)
   })
 })
+
+onBeforeUnmount(stopRestTimer)
 
 </script>
 
@@ -831,6 +889,40 @@ onMounted(() => {
           <p v-if="workoutDraftNotice" class="draft-notice" aria-live="polite">
             {{ workoutDraftNotice }}
           </p>
+
+          <section class="rest-timer" aria-labelledby="rest-timer-heading">
+            <div class="rest-timer-copy">
+              <span>REST TIMER</span>
+              <h3 id="rest-timer-heading">Recover between sets</h3>
+              <p>Start the countdown when you finish a set.</p>
+            </div>
+
+            <div class="rest-duration-options" role="group" aria-label="Rest duration">
+              <button
+                v-for="duration in REST_DURATIONS"
+                :key="duration"
+                type="button"
+                :class="{ active: restDuration === duration }"
+                :aria-pressed="restDuration === duration"
+                @click="setRestDuration(duration)"
+              >
+                {{ duration }}s
+              </button>
+            </div>
+
+            <strong class="rest-countdown" aria-live="polite">
+              {{ formattedRestTime }}
+            </strong>
+
+            <div class="rest-timer-actions">
+              <button type="button" class="rest-primary-button" @click="toggleRestTimer">
+                {{ isRestTimerRunning ? 'Pause' : restRemaining === 0 ? 'Start again' : 'Start' }}
+              </button>
+              <button type="button" class="rest-secondary-button" @click="resetRestTimer">
+                Reset
+              </button>
+            </div>
+          </section>
 
           <div
             v-if="exercises.length === 0"
@@ -1657,6 +1749,104 @@ onMounted(() => {
   background: #fff2ef;
 }
 
+.rest-timer {
+  margin: 18px 0 8px;
+  padding: 18px;
+  border: 1px solid #cfe0d6;
+  border-radius: 15px;
+  background: #f2f7f4;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.rest-timer-copy span {
+  color: #557267;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.rest-timer-copy h3 {
+  margin: 3px 0 2px;
+  color: #18382f;
+  font-size: 1.08rem;
+}
+
+.rest-timer-copy p {
+  margin: 0;
+  color: #63726d;
+  font-size: 0.9rem;
+}
+
+.rest-duration-options,
+.rest-timer-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.rest-duration-options {
+  grid-column: 1;
+}
+
+.rest-duration-options button,
+.rest-timer-actions button {
+  min-height: 38px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.rest-duration-options button {
+  min-width: 50px;
+  padding: 8px 10px;
+  border: 1px solid #cad9d0;
+  background: #fff;
+  color: #4e625b;
+}
+
+.rest-duration-options button.active {
+  border-color: #b5d83d;
+  background: #d9f16f;
+  color: #17352c;
+}
+
+.rest-countdown {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 76px;
+  color: #17352c;
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  text-align: center;
+}
+
+.rest-timer-actions {
+  grid-column: 2;
+  grid-row: 2;
+  justify-content: flex-end;
+}
+
+.rest-timer-actions button {
+  padding: 8px 14px;
+}
+
+.rest-primary-button {
+  border: 1px solid #244c40;
+  background: #244c40;
+  color: #fff;
+}
+
+.rest-secondary-button {
+  border: 1px solid #cad9d0;
+  background: #fff;
+  color: #4e625b;
+}
+
 .history-count {
   min-width: 31px;
   height: 31px;
@@ -1974,6 +2164,29 @@ onMounted(() => {
 
   .exercise-row {
     align-items: flex-start;
+  }
+
+  .rest-timer {
+    grid-template-columns: 1fr;
+  }
+
+  .rest-duration-options,
+  .rest-timer-actions {
+    grid-column: auto;
+    grid-row: auto;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .rest-duration-options button,
+  .rest-timer-actions button {
+    flex: 1;
+  }
+
+  .rest-countdown {
+    grid-column: auto;
+    grid-row: auto;
+    text-align: left;
   }
 
   .session-metrics {
