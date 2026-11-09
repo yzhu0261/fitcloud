@@ -15,8 +15,15 @@ const isLoading = ref(true)
 const loadError = ref('')
 const showAllWorkouts = ref(false)
 const showAllNutrition = ref(false)
+const selectedRange = ref('30')
 
 const PREVIEW_LIMIT = 10
+const RANGE_OPTIONS = [
+  { value: '7', label: '7 days' },
+  { value: '30', label: '30 days' },
+  { value: '90', label: '90 days' },
+  { value: 'all', label: 'All time' },
+]
 
 const numberValue = (value) => {
   const parsed = Number(value)
@@ -37,20 +44,40 @@ const formatDate = (date) => {
       }).format(parsed)
 }
 
+const rangeStartDate = computed(() => {
+  if (selectedRange.value === 'all') return ''
+
+  const start = new Date()
+  start.setDate(start.getDate() - (Number(selectedRange.value) - 1))
+  return toLocalDate(start)
+})
+
+const rangeLabel = computed(
+  () => RANGE_OPTIONS.find((option) => option.value === selectedRange.value)?.label || '30 days',
+)
+
+const workoutsInRange = computed(() =>
+  workouts.value.filter((workout) => !rangeStartDate.value || workout.date >= rangeStartDate.value),
+)
+
+const nutritionInRange = computed(() =>
+  nutrition.value.filter((record) => !rangeStartDate.value || record.date >= rangeStartDate.value),
+)
+
 const sortedWorkouts = computed(() => {
-  return [...workouts.value].sort((a, b) =>
+  return [...workoutsInRange.value].sort((a, b) =>
     String(b.date ?? '').localeCompare(String(a.date ?? '')),
   )
 })
 
 const sortedNutrition = computed(() => {
-  return [...nutrition.value].sort((a, b) =>
+  return [...nutritionInRange.value].sort((a, b) =>
     String(b.date ?? '').localeCompare(String(a.date ?? '')),
   )
 })
 
 const totalExercises = computed(() => {
-  return workouts.value.reduce(
+  return workoutsInRange.value.reduce(
     (total, workout) => total + (workout.exercises?.length ?? 0),
     0,
   )
@@ -67,7 +94,7 @@ const muscleGroupColours = {
 }
 
 const muscleGroupBreakdown = computed(() => {
-  const groups = workouts.value.reduce((result, workout) => {
+  const groups = workoutsInRange.value.reduce((result, workout) => {
     for (const exercise of workout.exercises ?? []) {
       const group = String(exercise.muscleGroup || 'other').trim().toLowerCase()
       result[group] = (result[group] || 0) + 1
@@ -96,7 +123,7 @@ const formatMuscleGroup = (group) =>
 const personalBests = computed(() => {
   const records = new Map()
 
-  for (const workout of workouts.value) {
+  for (const workout of workoutsInRange.value) {
     for (const exercise of workout.exercises ?? []) {
       const name = String(exercise.exercise || '').trim()
       const weight = numberValue(exercise.weight)
@@ -129,7 +156,7 @@ const personalBests = computed(() => {
 })
 
 const trainingStreak = computed(() => {
-  const dates = [...new Set(workouts.value.map((workout) => workout.date).filter(Boolean))]
+  const dates = [...new Set(workoutsInRange.value.map((workout) => workout.date).filter(Boolean))]
     .map((date) => new Date(`${date}T00:00:00`))
     .filter((date) => !Number.isNaN(date.getTime()))
     .sort((a, b) => a - b)
@@ -162,7 +189,7 @@ const trainingStreak = computed(() => {
 })
 
 const totalVolume = computed(() => {
-  const volume = workouts.value.reduce((workoutTotal, workout) => {
+  const volume = workoutsInRange.value.reduce((workoutTotal, workout) => {
     return (
       workoutTotal +
       (workout.exercises ?? []).reduce((exerciseTotal, exercise) => {
@@ -194,14 +221,14 @@ const nutritionTotals = (record) => {
 }
 
 const averageCalories = computed(() => {
-  if (nutrition.value.length === 0) return 0
+  if (nutritionInRange.value.length === 0) return 0
 
-  const calories = nutrition.value.reduce(
+  const calories = nutritionInRange.value.reduce(
     (total, record) => total + nutritionTotals(record).calories,
     0,
   )
 
-  return Math.round(calories / nutrition.value.length)
+  return Math.round(calories / nutritionInRange.value.length)
 })
 
 const displayedWorkouts = computed(() => {
@@ -224,32 +251,64 @@ const toLocalDate = (date) => {
   return `${year}-${month}-${day}`
 }
 
-const lastSevenDays = computed(() => {
-  const today = new Date()
+const trendBuckets = computed(() => {
+  const today = new Date(`${toLocalDate(new Date())}T00:00:00`)
+  const recordedDates = [...workouts.value, ...nutrition.value]
+    .map((record) => new Date(`${record.date}T00:00:00`))
+    .filter((date) => !Number.isNaN(date.getTime()) && date <= today)
+    .sort((a, b) => a - b)
+  const defaultStart = new Date(today)
+  defaultStart.setDate(today.getDate() - 6)
+  const start = rangeStartDate.value
+    ? new Date(`${rangeStartDate.value}T00:00:00`)
+    : (recordedDates[0] ?? defaultStart)
+  const totalDays = Math.max(1, Math.round((today - start) / 86400000) + 1)
+  const targetBuckets =
+    selectedRange.value === '7'
+      ? 7
+      : selectedRange.value === '30'
+        ? 6
+        : selectedRange.value === '90'
+          ? 9
+          : Math.min(10, totalDays)
+  const bucketSize = Math.max(1, Math.ceil(totalDays / targetBuckets))
+  const buckets = []
 
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(today)
-    date.setDate(today.getDate() - (6 - index))
+  for (let offset = 0; offset < totalDays; offset += bucketSize) {
+    const bucketStart = new Date(start)
+    bucketStart.setDate(start.getDate() + offset)
+    const bucketEnd = new Date(bucketStart)
+    bucketEnd.setDate(bucketStart.getDate() + bucketSize - 1)
 
-    return {
-      date: toLocalDate(date),
-      label: new Intl.DateTimeFormat('en-AU', { weekday: 'short' }).format(date),
-    }
-  })
+    if (bucketEnd > today) bucketEnd.setTime(today.getTime())
+
+    buckets.push({
+      start: toLocalDate(bucketStart),
+      end: toLocalDate(bucketEnd),
+      label:
+        bucketSize === 1
+          ? new Intl.DateTimeFormat('en-AU', { weekday: 'short' }).format(bucketStart)
+          : new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short' }).format(bucketStart),
+    })
+  }
+
+  return buckets
 })
 
 const trainingTrend = computed(() =>
-  lastSevenDays.value.map((day) => ({
-    ...day,
-    value: workouts.value.filter((workout) => workout.date === day.date).length,
+  trendBuckets.value.map((bucket) => ({
+    ...bucket,
+    value: workoutsInRange.value.filter(
+      (workout) => workout.date >= bucket.start && workout.date <= bucket.end,
+    ).length,
   })),
 )
 
 const calorieTrend = computed(() =>
-  lastSevenDays.value.map((day) => ({
-    ...day,
-    value: nutrition.value
-      .filter((record) => record.date === day.date)
+  trendBuckets.value.map((bucket) => ({
+    ...bucket,
+    value: nutritionInRange.value
+      .filter((record) => record.date >= bucket.start && record.date <= bucket.end)
       .reduce((total, record) => total + nutritionTotals(record).calories, 0),
   })),
 )
@@ -264,6 +323,12 @@ const calorieTrendMaximum = computed(() =>
 
 const barHeight = (value, maximum) =>
   `${value === 0 ? 4 : Math.max(12, Math.round((value / maximum) * 100))}%`
+
+const selectRange = (range) => {
+  selectedRange.value = range
+  showAllWorkouts.value = false
+  showAllNutrition.value = false
+}
 
 const escapeCsvCell = (value) => {
   const text = String(value ?? '')
@@ -413,8 +478,8 @@ onMounted(loadProgress)
         </div>
         <div class="topbar-actions">
           <div class="export-actions" aria-label="Export progress data">
-            <button type="button" :disabled="workouts.length === 0" @click="exportWorkouts">Export workouts</button>
-            <button type="button" :disabled="nutrition.length === 0" @click="exportNutrition">Export nutrition</button>
+            <button type="button" :disabled="workoutsInRange.length === 0" @click="exportWorkouts">Export workouts</button>
+            <button type="button" :disabled="nutritionInRange.length === 0" @click="exportNutrition">Export nutrition</button>
           </div>
           <UserProfileBadge />
         </div>
@@ -432,9 +497,28 @@ onMounted(loadProgress)
       </div>
 
       <template v-else>
+        <section class="period-toolbar" aria-label="Progress time range">
+          <div>
+            <p class="eyebrow">REPORTING PERIOD</p>
+            <strong>{{ rangeLabel }}</strong>
+          </div>
+          <div class="period-options" role="group" aria-label="Choose progress time range">
+            <button
+              v-for="option in RANGE_OPTIONS"
+              :key="option.value"
+              type="button"
+              :class="{ active: selectedRange === option.value }"
+              :aria-pressed="selectedRange === option.value"
+              @click="selectRange(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </section>
+
         <section class="summary-grid">
           <article class="summary-card blue-card">
-            <p>Total Workouts</p><strong>{{ workouts.length }}</strong><span>sessions completed</span>
+            <p>Total Workouts</p><strong>{{ workoutsInRange.length }}</strong><span>sessions completed</span>
           </article>
           <article class="summary-card yellow-card">
             <p>Total Exercises</p><strong>{{ totalExercises }}</strong><span>movements recorded</span>
@@ -447,14 +531,14 @@ onMounted(loadProgress)
           </article>
         </section>
 
-        <section class="trend-grid" aria-label="Seven-day progress trends">
+        <section class="trend-grid" :aria-label="`${rangeLabel} progress trends`">
           <article class="trend-card">
             <div class="trend-heading">
-              <div><p class="eyebrow">LAST 7 DAYS</p><h2>Training activity</h2></div>
+              <div><p class="eyebrow">{{ rangeLabel.toUpperCase() }}</p><h2>Training activity</h2></div>
               <span>{{ trainingTrend.reduce((total, day) => total + day.value, 0) }} sessions</span>
             </div>
-            <div class="bar-chart" role="img" aria-label="Training sessions saved during the last seven days">
-              <div v-for="day in trainingTrend" :key="day.date" class="bar-column" :title="`${day.date}: ${day.value} session${day.value === 1 ? '' : 's'}`">
+            <div class="bar-chart" :style="{ '--bar-count': trainingTrend.length }" role="img" :aria-label="`Training sessions saved during the selected ${rangeLabel.toLowerCase()} period`">
+              <div v-for="day in trainingTrend" :key="day.start" class="bar-column" :title="`${formatDate(day.start)} to ${formatDate(day.end)}: ${day.value} session${day.value === 1 ? '' : 's'}`">
                 <strong>{{ day.value }}</strong>
                 <div class="bar-track"><span class="training-bar" :style="{ height: barHeight(day.value, trainingTrendMaximum) }"></span></div>
                 <small>{{ day.label }}</small>
@@ -464,11 +548,11 @@ onMounted(loadProgress)
 
           <article class="trend-card">
             <div class="trend-heading">
-              <div><p class="eyebrow">LAST 7 DAYS</p><h2>Calories logged</h2></div>
-              <span>Daily totals</span>
+              <div><p class="eyebrow">{{ rangeLabel.toUpperCase() }}</p><h2>Calories logged</h2></div>
+              <span>Period totals</span>
             </div>
-            <div class="bar-chart" role="img" aria-label="Calories logged during the last seven days">
-              <div v-for="day in calorieTrend" :key="day.date" class="bar-column" :title="`${day.date}: ${day.value} kcal`">
+            <div class="bar-chart" :style="{ '--bar-count': calorieTrend.length }" role="img" :aria-label="`Calories logged during the selected ${rangeLabel.toLowerCase()} period`">
+              <div v-for="day in calorieTrend" :key="day.start" class="bar-column" :title="`${formatDate(day.start)} to ${formatDate(day.end)}: ${day.value} kcal`">
                 <strong>{{ day.value.toLocaleString('en-AU') }}</strong>
                 <div class="bar-track"><span class="calorie-bar" :style="{ height: barHeight(day.value, calorieTrendMaximum) }"></span></div>
                 <small>{{ day.label }}</small>
@@ -642,6 +726,13 @@ onMounted(loadProgress)
 .export-actions button { min-height: 44px; padding: 10px 13px; border: 1px solid #cdd9d1; border-radius: 11px; background: #fffefd; color: #315e51; font: inherit; font-size: .9rem; font-weight: 780; cursor: pointer; }
 .export-actions button:hover:not(:disabled) { border-color: #9ebc49; background: #f2f7df; }
 .export-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.period-toolbar { margin-bottom: 24px; padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid #dfe7e2; border-radius: 16px; background: #fffefd; }
+.period-toolbar > div:first-child p { margin: 0 0 4px; }
+.period-toolbar > div:first-child strong { color: #17352c; font-size: 1.12rem; }
+.period-toolbar > div:last-child { display: flex; flex-wrap: wrap; gap: 7px; }
+.period-toolbar button { min-height: 42px; padding: 9px 14px; border: 1px solid #d4ddd7; border-radius: 10px; background: #f7faf8; color: #52615d; font: inherit; font-size: .92rem; font-weight: 750; cursor: pointer; }
+.period-toolbar button:hover { border-color: #a9c04e; background: #f1f7d9; }
+.period-toolbar button.active, .period-toolbar button[aria-pressed='true'] { border-color: #a9c04e; background: #e2f58b; color: #17352c; }
 .profile { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border: 1px solid #e7e9ed; border-radius: 999px; background: #fffefd; color: inherit; text-decoration: none; transition: border-color .2s ease, transform .2s ease; }
 .profile:hover { border-color: #b8ca75; transform: translateY(-1px); }
 .profile-avatar { width: 42px; height: 42px; border-radius: 50%; background: #cbed63; display: grid; place-items: center; font-weight: 800; }
@@ -658,7 +749,7 @@ onMounted(loadProgress)
 .trend-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 22px; }
 .trend-heading h2 { margin: 6px 0 0; font-size: 1.45rem; }
 .trend-heading > span { padding: 7px 10px; border-radius: 999px; background: #eef4ef; color: #52615d; font-size: .86rem; font-weight: 750; white-space: nowrap; }
-.bar-chart { display: grid; grid-template-columns: repeat(7, minmax(38px, 1fr)); gap: 10px; height: 220px; }
+.bar-chart { display: grid; grid-template-columns: repeat(var(--bar-count, 7), minmax(38px, 1fr)); gap: 10px; height: 220px; }
 .bar-column { display: grid; grid-template-rows: 24px minmax(0, 1fr) 22px; gap: 7px; min-width: 0; text-align: center; }
 .bar-column strong { overflow: hidden; color: #465852; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
 .bar-column small { color: #6b7772; font-size: .78rem; font-weight: 700; }
@@ -730,7 +821,7 @@ onMounted(loadProgress)
 .retry-button { padding: 11px 17px; border: 0; border-radius: 10px; background: #cbed63; color: #17352c; font-size: 1rem; font-weight: 700; cursor: pointer; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1200px) { .topbar { align-items: flex-start; }.topbar-actions { flex-direction: column-reverse; align-items: flex-end; }.summary-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.trend-grid, .achievement-grid, .history-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.period-toolbar { align-items: flex-start; flex-direction: column; }.trend-grid, .achievement-grid, .history-grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .balance-grid { grid-template-columns: 1fr; }.balance-heading { flex-direction: column; }.balance-heading > span { white-space: normal; } }
-@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .export-actions { width: 100%; }.date-badge { width: 80px; flex-basis: 80px; }.achievement-heading { flex-direction: column; }.best-item { grid-template-columns: 34px minmax(0, 1fr); }.best-weight { grid-column: 2; } }
+@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .export-actions { width: 100%; }.period-toolbar > div:last-child { width: 100%; }.period-toolbar button { flex: 1; }.bar-chart { overflow-x: auto; }.date-badge { width: 80px; flex-basis: 80px; }.achievement-heading { flex-direction: column; }.best-item { grid-template-columns: 34px minmax(0, 1fr); }.best-weight { grid-column: 2; } }
 </style>
