@@ -512,6 +512,17 @@ onUnmounted(() => {
 
             <span class="arrow">→</span>
           </RouterLink>
+
+          <RouterLink to="/body" class="feature-card">
+            <div class="feature-icon pink-icon"><AppIcon name="body" :size="27" /></div>
+
+            <div>
+              <h2>Body Metrics</h2>
+              <p>Track weight, body fat, and waist measurements over time.</p>
+            </div>
+
+            <span class="arrow">→</span>
+          </RouterLink>
         </section>
 
         <!-- Motivation card -->
@@ -1082,7 +1093,7 @@ onUnmounted(() => {
 
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
 }
 
@@ -1126,6 +1137,10 @@ onUnmounted(() => {
 
 .lime-icon {
   background: #e2f58b;
+}
+
+.pink-icon {
+  background: #f6dfe7;
 }
 
 .feature-card h2 {

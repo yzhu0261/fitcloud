@@ -32,6 +32,10 @@ defineProps({
     <template v-else-if="name === 'progress'">
       <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" /><path d="m4 9 6-4 6 7 5-5" />
     </template>
+    <template v-else-if="name === 'body'">
+      <path d="M5 20h14a2 2 0 0 0 2-2V7a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v11a2 2 0 0 0 2 2Z" />
+      <path d="M8 9a4 4 0 0 1 8 0M12 9l2-2" />
+    </template>
     <template v-else-if="name === 'coach'">
       <path d="m12 3 1.4 4.2L18 9l-4.6 1.8L12 15l-1.4-4.2L6 9l4.6-1.8L12 3Z" />
       <path d="m19 15 .7 2.1L22 18l-2.3.9L19 21l-.7-2.1L16 18l2.3-.9L19 15Z" />
@@ -51,6 +55,7 @@ defineProps({
 .icon-workout { color: #f0642b; }
 .icon-nutrition { color: #08a89d; }
 .icon-progress { color: #9b51e0; }
+.icon-body { color: #df5b68; }
 .icon-coach { color: #52a83f; }
 .icon-plan { color: #d79613; }
 .icon-account { color: #5f7185; }

@@ -9,6 +9,7 @@ RepVelta is a serverless fitness tracking and nutrition management web applicati
 - Exercise history and progress tracking
 - Daily food logging
 - Nutrition analysis, including calories and protein intake
+- Body measurement tracking for weight, body fat, and waist trends
 - AI Fitness Coach with authenticated workout and nutrition tools
 
 ## Architecture
@@ -107,14 +108,31 @@ Configure these environment variables:
 - `WORKOUTS_TABLE=FitCloudWorkouts`
 - `NUTRITION_TABLE=FitCloudNutrition`
 - `PLANS_TABLE_NAME=RepVeltaPlans`
+- `BODY_METRICS_TABLE=RepVeltaBodyMetrics`
 - `ALLOWED_ORIGIN=https://main.d4qy0pgoybda9.amplifyapp.com`
 
 Grant the Lambda role `dynamodb:GetItem`, `dynamodb:UpdateItem`, and
 `dynamodb:DeleteItem` on the profiles table. For account cleanup, also grant
 `dynamodb:Query` and `dynamodb:BatchWriteItem` on `FitCloudWorkouts`,
-`FitCloudNutrition`, and `RepVeltaPlans`. Attach it to Cognito-protected API
+`FitCloudNutrition`, `RepVeltaPlans`, and `RepVeltaBodyMetrics`. Attach it to Cognito-protected API
 Gateway `GET /profile`, `PUT /profile`, and `DELETE /profile` routes. The frontend
 keeps a local fallback when the cloud profile API is unavailable. If another API endpoint is used, set
 `VITE_PROFILE_API_URL` in the frontend environment.
+
+## Body measurements
+
+`backend/body-metrics` contains the authenticated CRUD handler for body measurement
+records. Create an on-demand DynamoDB table named `RepVeltaBodyMetrics` with
+`userId` (String) as the partition key and `metricId` (String) as the sort key.
+Deploy the handler as a Node.js 20 or later Lambda using `index.handler` and configure:
+
+- `BODY_METRICS_TABLE=RepVeltaBodyMetrics`
+- `ALLOWED_ORIGIN` with the frontend origin
+
+Grant the Lambda role `dynamodb:Query`, `dynamodb:PutItem`, `dynamodb:UpdateItem`,
+and `dynamodb:DeleteItem` on only the body metrics table. Attach it to a
+Cognito-protected API Gateway `ANY /body-metrics` route and set the endpoint as
+`VITE_BODY_METRICS_API_URL`. Until this variable is configured, the frontend uses
+per-user browser storage.
 
 ![RepVelta AWS Architecture](docs/architecture/fitcloud-aws-architecture.png)

@@ -14,6 +14,7 @@ const primaryItems = [
 ]
 
 const moreItems = [
+  { to: '/body', label: 'Body Metrics', description: 'Track weight and body measurements', icon: 'body' },
   { to: '/coach', label: 'AI Coach', description: 'Ask questions and adjust your goals', icon: 'coach' },
   { to: '/plan', label: 'Plan', description: 'Review your weekly training plan', icon: 'plan' },
   { to: '/account', label: 'Account', description: 'Manage profile, goals, and security', icon: 'account' },

@@ -7,6 +7,7 @@ const items = [
   { to: '/workout', label: 'Workout', icon: 'workout' },
   { to: '/nutrition', label: 'Nutrition', icon: 'nutrition' },
   { to: '/progress', label: 'Progress', icon: 'progress' },
+  { to: '/body', label: 'Body Metrics', icon: 'body' },
   { to: '/coach', label: 'AI Coach', icon: 'coach' },
   { to: '/plan', label: 'My Plan', icon: 'plan' },
   { to: '/account', label: 'My Account', icon: 'account' },

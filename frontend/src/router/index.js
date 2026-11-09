@@ -77,6 +77,14 @@ const router = createRouter({
       },
     },
     {
+      path: '/body',
+      name: 'body-metrics',
+      component: () => import('../views/BodyMetricsView.vue'),
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/account',
       name: 'account',
       component: AccountView,

@@ -23,6 +23,10 @@ const userDataTables = [
     tableName: process.env.PLANS_TABLE_NAME || 'RepVeltaPlans',
     sortKey: 'planId',
   },
+  {
+    tableName: process.env.BODY_METRICS_TABLE || 'RepVeltaBodyMetrics',
+    sortKey: 'metricId',
+  },
 ]
 
 const headers = {
@@ -187,7 +191,7 @@ export const handler = async (event) => {
 
       return response(200, {
         deleted: true,
-        resources: ['profile', 'workouts', 'nutrition', 'plans'],
+        resources: ['profile', 'workouts', 'nutrition', 'plans', 'bodyMetrics'],
       })
     }
 
