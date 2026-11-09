@@ -16,6 +16,7 @@ const loadError = ref('')
 const showAllWorkouts = ref(false)
 const showAllNutrition = ref(false)
 const selectedRange = ref('30')
+const selectedExercise = ref('')
 
 const PREVIEW_LIMIT = 10
 const RANGE_OPTIONS = [
@@ -153,6 +154,71 @@ const personalBests = computed(() => {
   return [...records.values()]
     .sort((a, b) => b.weight - a.weight || b.reps - a.reps || a.name.localeCompare(b.name))
     .slice(0, 5)
+})
+
+const exerciseOptions = computed(() => {
+  const names = new Map()
+
+  for (const workout of workoutsInRange.value) {
+    for (const exercise of workout.exercises ?? []) {
+      const name = String(exercise.exercise || '').trim()
+      if (name && numberValue(exercise.weight) > 0) names.set(name.toLowerCase(), name)
+    }
+  }
+
+  return [...names.values()].sort((a, b) => a.localeCompare(b))
+})
+
+const activeExerciseName = computed(() => {
+  if (exerciseOptions.value.includes(selectedExercise.value)) return selectedExercise.value
+  return exerciseOptions.value[0] || ''
+})
+
+const exerciseProgression = computed(() => {
+  if (!activeExerciseName.value) return []
+
+  const recordsByDate = new Map()
+
+  for (const workout of workoutsInRange.value) {
+    for (const exercise of workout.exercises ?? []) {
+      const name = String(exercise.exercise || '').trim()
+      const weight = numberValue(exercise.weight)
+
+      if (name.toLowerCase() !== activeExerciseName.value.toLowerCase() || weight <= 0) continue
+
+      const candidate = {
+        date: workout.date,
+        weight,
+        reps: numberValue(exercise.reps),
+      }
+      const current = recordsByDate.get(workout.date)
+
+      if (!current || candidate.weight > current.weight) {
+        recordsByDate.set(workout.date, candidate)
+      }
+    }
+  }
+
+  return [...recordsByDate.values()]
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .slice(-12)
+})
+
+const exerciseProgressionMaximum = computed(() =>
+  Math.max(1, ...exerciseProgression.value.map((record) => record.weight)),
+)
+
+const exerciseProgressionSummary = computed(() => {
+  if (!exerciseProgression.value.length) return null
+
+  const first = exerciseProgression.value[0]
+  const latest = exerciseProgression.value.at(-1)
+
+  return {
+    first,
+    latest,
+    change: latest.weight - first.weight,
+  }
 })
 
 const trainingStreak = computed(() => {
@@ -596,6 +662,71 @@ onMounted(loadProgress)
           </div>
         </section>
 
+        <section class="progression-card" aria-labelledby="exercise-progression-heading">
+          <div class="progression-heading">
+            <div>
+              <p class="eyebrow">STRENGTH HISTORY</p>
+              <h2 id="exercise-progression-heading">Exercise progression</h2>
+              <p>Compare the heaviest weight recorded for an exercise on each training day.</p>
+            </div>
+
+            <label v-if="exerciseOptions.length" class="exercise-picker">
+              <span>Exercise</span>
+              <select
+                :value="activeExerciseName"
+                @change="selectedExercise = $event.target.value"
+              >
+                <option v-for="name in exerciseOptions" :key="name" :value="name">
+                  {{ name }}
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <template v-if="exerciseProgressionSummary">
+            <div class="progression-summary">
+              <div>
+                <span>Starting weight</span>
+                <strong>{{ exerciseProgressionSummary.first.weight.toLocaleString('en-AU') }} kg</strong>
+              </div>
+              <div>
+                <span>Latest weight</span>
+                <strong>{{ exerciseProgressionSummary.latest.weight.toLocaleString('en-AU') }} kg</strong>
+              </div>
+              <div>
+                <span>Net change</span>
+                <strong :class="{ positive: exerciseProgressionSummary.change > 0 }">
+                  {{ exerciseProgressionSummary.change > 0 ? '+' : '' }}{{ exerciseProgressionSummary.change.toLocaleString('en-AU') }} kg
+                </strong>
+              </div>
+            </div>
+
+            <div
+              class="progression-chart"
+              :style="{ '--progress-count': exerciseProgression.length }"
+              role="img"
+              :aria-label="`${activeExerciseName} weight progression over ${exerciseProgression.length} recorded training days`"
+            >
+              <div
+                v-for="record in exerciseProgression"
+                :key="record.date"
+                class="progression-column"
+                :title="`${formatDate(record.date)}: ${record.weight} kg for ${record.reps} reps`"
+              >
+                <strong>{{ record.weight }} kg</strong>
+                <div class="progression-track">
+                  <span :style="{ height: barHeight(record.weight, exerciseProgressionMaximum) }"></span>
+                </div>
+                <small>{{ formatDate(record.date).replace(/ \d{4}$/, '') }}</small>
+              </div>
+            </div>
+          </template>
+
+          <div v-else class="balance-empty">
+            Record a workout with exercise weights to see strength progression here.
+          </div>
+        </section>
+
         <section class="achievement-grid" aria-label="Training achievements">
           <article class="achievement-card personal-best-card">
             <div class="achievement-heading">
@@ -771,6 +902,23 @@ onMounted(loadProgress)
 .balance-track { height: 11px; overflow: hidden; border-radius: 999px; background: #edf1ee; }
 .balance-track span { display: block; height: 100%; border-radius: inherit; transition: width .35s ease; }
 .balance-empty { padding: 26px; border-radius: 14px; background: #f4f7f5; color: #64716d; text-align: center; }
+.progression-card { margin-bottom: 24px; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
+.progression-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.progression-heading h2 { margin: 6px 0 5px; font-size: 1.48rem; }
+.progression-heading div > p:last-child { max-width: 620px; margin: 0; color: #64716d; font-size: .98rem; line-height: 1.5; }
+.exercise-picker { min-width: 230px; display: grid; gap: 7px; color: #52615d; font-size: .86rem; font-weight: 800; }
+.exercise-picker select { width: 100%; min-height: 44px; padding: 9px 36px 9px 12px; border: 1px solid #cad7cf; border-radius: 11px; background: #f7faf8; color: #17352c; font: inherit; font-weight: 750; }
+.progression-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+.progression-summary div { padding: 16px 18px; border-radius: 14px; background: #f2f6f3; }
+.progression-summary span { display: block; margin-bottom: 7px; color: #64716d; font-size: .86rem; font-weight: 700; }
+.progression-summary strong { color: #244c40; font-size: 1.22rem; }
+.progression-summary strong.positive { color: #668920; }
+.progression-chart { display: grid; grid-template-columns: repeat(var(--progress-count, 1), minmax(58px, 1fr)); gap: 12px; height: 250px; overflow-x: auto; }
+.progression-column { min-width: 58px; display: grid; grid-template-rows: 25px minmax(0, 1fr) 25px; gap: 7px; text-align: center; }
+.progression-column > strong { overflow: hidden; color: #315e51; font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+.progression-column > small { overflow: hidden; color: #6b7772; font-size: .76rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.progression-track { position: relative; overflow: hidden; border-radius: 10px; background: #f0f3f1; }
+.progression-track span { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 10px 10px 6px 6px; background: linear-gradient(180deg, #cbed63, #779c2f); transition: height .35s ease; }
 .achievement-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .75fr); gap: 22px; margin-bottom: 24px; }
 .achievement-card { min-width: 0; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
 .achievement-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
@@ -822,6 +970,6 @@ onMounted(loadProgress)
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1200px) { .topbar { align-items: flex-start; }.topbar-actions { flex-direction: column-reverse; align-items: flex-end; }.summary-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.period-toolbar { align-items: flex-start; flex-direction: column; }.trend-grid, .achievement-grid, .history-grid { grid-template-columns: 1fr; } }
-@media (max-width: 700px) { .balance-grid { grid-template-columns: 1fr; }.balance-heading { flex-direction: column; }.balance-heading > span { white-space: normal; } }
-@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid { grid-template-columns: 1fr; } .export-actions { width: 100%; }.period-toolbar > div:last-child { width: 100%; }.period-toolbar button { flex: 1; }.bar-chart { overflow-x: auto; }.date-badge { width: 80px; flex-basis: 80px; }.achievement-heading { flex-direction: column; }.best-item { grid-template-columns: 34px minmax(0, 1fr); }.best-weight { grid-column: 2; } }
+@media (max-width: 700px) { .balance-grid { grid-template-columns: 1fr; }.balance-heading, .progression-heading { flex-direction: column; }.balance-heading > span { white-space: normal; }.exercise-picker { width: 100%; min-width: 0; } }
+@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid, .progression-summary { grid-template-columns: 1fr; } .export-actions { width: 100%; }.period-toolbar > div:last-child { width: 100%; }.period-toolbar button { flex: 1; }.bar-chart { overflow-x: auto; }.date-badge { width: 80px; flex-basis: 80px; }.achievement-heading { flex-direction: column; }.best-item { grid-template-columns: 34px minmax(0, 1fr); }.best-weight { grid-column: 2; } }
 </style>
