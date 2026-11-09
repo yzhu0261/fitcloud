@@ -128,8 +128,22 @@ const selectedDateLabel = computed(() => {
     year: 'numeric',
   }).format(parsed)
 })
+const linkedPlanDay = computed(() => {
+  if (route.query.fromPlan !== '1' || !weeklyPlan.value?.days) return null
+
+  const requestedDay = Number(route.query.day)
+  return Number.isInteger(requestedDay) && requestedDay > 0
+    ? weeklyPlan.value.days.find((day) => day.dayNumber === requestedDay) || null
+    : todayPlan.value
+})
 const isPlanWorkout = computed(
-  () => route.query.fromPlan === '1' && Boolean(todayPlan.value) && isSelectedToday.value,
+  () =>
+    Boolean(linkedPlanDay.value) &&
+    selectedWorkoutDate.value === linkedPlanDay.value.date &&
+    selectedWorkoutDate.value <= today.value,
+)
+const displayedPlanDay = computed(() =>
+  isPlanWorkout.value ? linkedPlanDay.value : isSelectedToday.value ? todayPlan.value : null,
 )
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 const sortedWorkouts = computed(() =>
@@ -380,17 +394,17 @@ const saveWorkout = async () => {
     workoutDraftNotice.value = ''
     await loadWorkouts()
 
-    if (isPlanWorkout.value && !todayPlan.value.completed) {
+    if (isPlanWorkout.value && !linkedPlanDay.value.completed) {
       try {
         weeklyPlan.value = await updateWeeklyPlanDay(
           weeklyPlan.value,
-          todayPlan.value.dayNumber,
+          linkedPlanDay.value.dayNumber,
           true,
         )
         todayPlan.value = getTodayPlanDay(weeklyPlan.value)
-        saveNotice.value = `Workout saved and Day ${todayPlan.value.dayNumber} marked complete.`
+        saveNotice.value = `Workout saved and Day ${linkedPlanDay.value.dayNumber} marked complete.`
       } catch {
-        saveNotice.value = 'Workout saved, but today’s plan could not be marked complete. You can update it from My Plan.'
+        saveNotice.value = 'Workout saved, but the linked plan day could not be marked complete. You can update it from My Plan.'
       }
     } else {
       saveNotice.value = 'Workout saved successfully.'
@@ -599,6 +613,15 @@ onMounted(() => {
   loadWeeklyPlan().then((plan) => {
     weeklyPlan.value = plan
     todayPlan.value = getTodayPlanDay(plan)
+
+    if (route.query.fromPlan === '1') {
+      const requestedDay = Number(route.query.day)
+      const requestedPlanDay = plan?.days?.find((day) => day.dayNumber === requestedDay)
+
+      if (requestedPlanDay?.date && requestedPlanDay.date <= today.value) {
+        selectedWorkoutDate.value = requestedPlanDay.date
+      }
+    }
   })
 })
 
@@ -649,13 +672,13 @@ onMounted(() => {
         </div>
       </header>
 
-      <section v-if="todayPlan && isSelectedToday" class="coach-plan-banner" :class="{ active: isPlanWorkout }">
+      <section v-if="displayedPlanDay" class="coach-plan-banner" :class="{ active: isPlanWorkout }">
         <div class="coach-plan-mark"><AppIcon name="coach" :size="25" /></div>
         <div>
-          <p>{{ isPlanWorkout ? 'PLAN WORKOUT ACTIVE' : 'REPVELTA COACH' }} · DAY {{ todayPlan.dayNumber }}</p>
-          <h2>{{ isPlanWorkout ? 'Complete today’s planned session' : 'Today’s saved plan' }}</h2>
-          <div>{{ todayPlan.details }}</div>
-          <small v-if="isPlanWorkout">Saving this workout will automatically mark today’s plan complete.</small>
+          <p>{{ isPlanWorkout ? 'PLAN WORKOUT ACTIVE' : 'REPVELTA COACH' }} · DAY {{ displayedPlanDay.dayNumber }}</p>
+          <h2>{{ isPlanWorkout ? `Complete the planned session for ${selectedDateLabel}` : 'Today’s saved plan' }}</h2>
+          <div>{{ displayedPlanDay.details }}</div>
+          <small v-if="isPlanWorkout">Saving this workout will automatically mark this plan day complete.</small>
         </div>
         <RouterLink to="/plan">View full plan →</RouterLink>
       </section>
@@ -681,7 +704,7 @@ onMounted(() => {
         <article class="summary-card lime-card">
           <p>{{ isSelectedToday ? "Today's Focus" : 'Session Date' }}</p>
           <div class="summary-text">
-            {{ isSelectedToday && todayPlan ? `Plan Day ${todayPlan.dayNumber}` : isSelectedToday ? 'Keep moving' : selectedDateLabel }}
+            {{ displayedPlanDay ? `Plan Day ${displayedPlanDay.dayNumber}` : isSelectedToday ? 'Keep moving' : selectedDateLabel }}
           </div>
           <span>{{ isPlanWorkout ? 'Plan-linked session' : isSelectedToday ? 'One session at a time' : 'Historical workout entry' }}</span>
         </article>
