@@ -203,9 +203,19 @@
             <h2>Today's Meals</h2>
           </div>
 
-          <span class="food-count">
-            {{ foods.length }} {{ foods.length === 1 ? 'food' : 'foods' }}
-          </span>
+          <div class="meal-heading-actions">
+            <span class="food-count">
+              {{ foods.length }} {{ foods.length === 1 ? 'food' : 'foods' }}
+            </span>
+            <button
+              v-if="foods.length"
+              type="button"
+              class="clear-meals-button"
+              @click="clearPendingMeals"
+            >
+              Clear pending meals
+            </button>
+          </div>
         </div>
 
         <p v-if="mealActionNotice" class="meal-action-notice" aria-live="polite">
@@ -750,6 +760,23 @@ const removeFood = (index) => {
   } else if (editingPendingFoodIndex.value > index) {
     editingPendingFoodIndex.value -= 1
   }
+}
+
+const clearPendingMeals = () => {
+  if (!foods.value.length) return
+
+  const confirmed = window.confirm(
+    'Clear every pending food from today’s meals? Saved nutrition history will not be affected.',
+  )
+
+  if (!confirmed) return
+
+  cancelPendingFoodEdit()
+  foods.value = []
+  clearActivityDraft(nutritionDraftKey.value)
+  nutritionDraftNotice.value = ''
+  saveMessage.value = ''
+  mealActionNotice.value = 'Pending meals cleared. Your saved nutrition history was not changed.'
 }
 
 const startEditingNutrition = (record) => {
@@ -1459,6 +1486,29 @@ const deleteNutrition = async (nutritionId) => {
   font-weight: 700;
 }
 
+.meal-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clear-meals-button {
+  min-height: 36px;
+  padding: 8px 11px;
+  border: 1px solid #e3c2bd;
+  border-radius: 9px;
+  background: #fff;
+  color: #a43a30;
+  font: inherit;
+  font-size: .86rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.clear-meals-button:hover {
+  background: #fff2ef;
+}
+
 .empty-state {
   padding: 32px;
   text-align: center;
@@ -1916,6 +1966,11 @@ const deleteNutrition = async (nutritionId) => {
 
   .meal-item-actions button {
     flex: 1;
+  }
+
+  .meal-heading-actions {
+    align-items: flex-end;
+    flex-direction: column;
   }
 
   .calorie-goal-card {

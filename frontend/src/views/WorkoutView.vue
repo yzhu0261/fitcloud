@@ -264,6 +264,29 @@ const removeExercise = (index) => {
   exercises.value.splice(index, 1)
 }
 
+const clearCurrentSession = () => {
+  if (!exercises.value.length) return
+
+  const confirmed = window.confirm(
+    'Clear every exercise from the current session? Saved workout history will not be affected.',
+  )
+
+  if (!confirmed) return
+
+  exercises.value = []
+  muscleGroup.value = ''
+  exercise.value = ''
+  sets.value = ''
+  reps.value = ''
+  weight.value = ''
+  formError.value = ''
+  saveNotice.value = ''
+  templateNotice.value = ''
+  historyActionNotice.value = ''
+  workoutDraftNotice.value = ''
+  clearActivityDraft(workoutDraftKey.value)
+}
+
 const saveWorkout = async () => {
   formError.value = ''
   saveNotice.value = ''
@@ -786,9 +809,19 @@ onMounted(() => {
               </p>
             </div>
 
-            <span class="session-badge">
-              Today
-            </span>
+            <div class="session-heading-actions">
+              <span class="session-badge">
+                Today
+              </span>
+              <button
+                v-if="exercises.length"
+                type="button"
+                class="clear-session-button"
+                @click="clearCurrentSession"
+              >
+                Clear session
+              </button>
+            </div>
           </div>
 
           <p v-if="historyActionNotice" class="history-action-notice" aria-live="polite">
@@ -1599,6 +1632,29 @@ onMounted(() => {
   background: #fff1a8;
   font-size: 0.92rem;
   font-weight: 700;
+}
+
+.session-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clear-session-button {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #e3c2bd;
+  border-radius: 9px;
+  background: #fff;
+  color: #a43a30;
+  font: inherit;
+  font-size: .84rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.clear-session-button:hover {
+  background: #fff2ef;
 }
 
 .history-count {
