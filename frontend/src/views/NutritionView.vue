@@ -29,13 +29,19 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">DAILY NUTRITION</p>
-          <h1>Today's Nutrition</h1>
+          <h1>{{ isSelectedToday ? "Today's Nutrition" : `Nutrition for ${selectedDateLabel}` }}</h1>
           <p class="subtitle">
-            Track your meals and daily nutrients.
+            {{ isSelectedToday ? 'Track your meals and daily nutrients.' : 'Review or add meals for a previous date.' }}
           </p>
         </div>
 
-        <UserProfileBadge />
+        <div class="topbar-tools">
+          <label class="log-date-control">
+            <span>Log date</span>
+            <input v-model="selectedNutritionDate" type="date" :max="today" />
+          </label>
+          <UserProfileBadge />
+        </div>
       </header>
 
       <!-- Display today's nutrition summary. -->
@@ -86,7 +92,7 @@
           <span :style="{ width: `${calorieGoalProgress}%` }"></span>
         </div>
         <p class="goal-note">
-          Includes {{ savedFoodsToday.length }} saved and {{ foods.length }} pending food{{ savedFoodsToday.length + foods.length === 1 ? '' : 's' }} today.
+          Includes {{ savedFoodsForDate.length }} saved and {{ foods.length }} pending food{{ savedFoodsForDate.length + foods.length === 1 ? '' : 's' }} for {{ isSelectedToday ? 'today' : selectedDateLabel }}.
         </p>
       </section>
 
@@ -200,7 +206,7 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">TODAY</p>
-            <h2>Today's Meals</h2>
+            <h2>{{ isSelectedToday ? "Today's Meals" : `Meals for ${selectedDateLabel}` }}</h2>
           </div>
 
           <div class="meal-heading-actions">
@@ -511,6 +517,19 @@ const toLocalDate = (date) => {
 }
 
 const today = computed(() => toLocalDate(new Date()))
+const selectedNutritionDate = ref(toLocalDate(new Date()))
+const isSelectedToday = computed(() => selectedNutritionDate.value === today.value)
+const selectedDateLabel = computed(() => {
+  const parsed = new Date(`${selectedNutritionDate.value}T00:00:00`)
+
+  if (Number.isNaN(parsed.getTime())) return selectedNutritionDate.value
+
+  return new Intl.DateTimeFormat('en-AU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(parsed)
+})
 
 const sortedNutritionHistory = computed(() =>
   [...nutritionHistory.value].sort((a, b) =>
@@ -544,13 +563,13 @@ const clearHistoryFilters = () => {
   historyDateTo.value = ''
 }
 
-const savedFoodsToday = computed(() =>
+const savedFoodsForDate = computed(() =>
   nutritionHistory.value
-    .filter((record) => record.date === today.value)
+    .filter((record) => record.date === selectedNutritionDate.value)
     .flatMap((record) => record.foods ?? []),
 )
 
-const todaysFoods = computed(() => [...savedFoodsToday.value, ...foods.value])
+const selectedDateFoods = computed(() => [...savedFoodsForDate.value, ...foods.value])
 
 const recentFoodPresets = computed(() => {
   const seen = new Set()
@@ -607,7 +626,7 @@ const repeatNutritionRecord = (record) => {
   foods.value.push(...copiedFoods)
   formError.value = ''
   saveMessage.value = ''
-  mealActionNotice.value = `${copiedFoods.length} food${copiedFoods.length === 1 ? '' : 's'} copied to today’s pending meals. Review the list before saving.`
+  mealActionNotice.value = `${copiedFoods.length} food${copiedFoods.length === 1 ? '' : 's'} copied to the selected date. Review the list before saving.`
   requestAnimationFrame(() => {
     document.getElementById('todays-meals')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   })
@@ -615,25 +634,25 @@ const repeatNutritionRecord = (record) => {
 
 // Calculate the total nutrition values from today's food records.
 const totalCalories = computed(() => {
-  return todaysFoods.value.reduce((total, food) => {
+  return selectedDateFoods.value.reduce((total, food) => {
     return total + Number(food.calories)
   }, 0)
 })
 
 const totalProtein = computed(() => {
-  return todaysFoods.value.reduce((total, food) => {
+  return selectedDateFoods.value.reduce((total, food) => {
     return total + Number(food.protein)
   }, 0)
 })
 
 const totalCarbs = computed(() => {
-  return todaysFoods.value.reduce((total, food) => {
+  return selectedDateFoods.value.reduce((total, food) => {
     return total + Number(food.carbs)
   }, 0)
 })
 
 const totalFat = computed(() => {
-  return todaysFoods.value.reduce((total, food) => {
+  return selectedDateFoods.value.reduce((total, food) => {
     return total + Number(food.fat)
   }, 0)
 })
@@ -645,7 +664,7 @@ const calorieGoalProgress = computed(() =>
 const calorieGoalMessage = computed(() => {
   const difference = dailyCalorieGoal.value - totalCalories.value
 
-  if (difference > 0) return `${difference.toLocaleString('en-AU')} kcal remaining today`
+  if (difference > 0) return `${difference.toLocaleString('en-AU')} kcal remaining for this date`
   if (difference < 0) return `${Math.abs(difference).toLocaleString('en-AU')} kcal above your target`
   return 'Daily target reached'
 })
@@ -710,7 +729,7 @@ const addFood = () => {
 
   if (editingPendingFoodIndex.value >= 0) {
     foods.value.splice(editingPendingFoodIndex.value, 1, pendingFood)
-    mealActionNotice.value = `${pendingFood.foodName} was updated in today’s pending meals.`
+    mealActionNotice.value = `${pendingFood.foodName} was updated in the pending meals.`
     editingPendingFoodIndex.value = -1
   } else {
     foods.value.push(pendingFood)
@@ -766,7 +785,7 @@ const clearPendingMeals = () => {
   if (!foods.value.length) return
 
   const confirmed = window.confirm(
-    'Clear every pending food from today’s meals? Saved nutrition history will not be affected.',
+    'Clear every pending food for the selected date? Saved nutrition history will not be affected.',
   )
 
   if (!confirmed) return
@@ -913,8 +932,16 @@ const initializeNutritionDraft = async () => {
     nutritionDraftKey.value = key
 
     if (foods.value.length) {
-      saveActivityDraft(key, { foods: foods.value })
+      saveActivityDraft(key, { date: selectedNutritionDate.value, foods: foods.value })
       return
+    }
+
+    if (
+      typeof draft?.date === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(draft.date) &&
+      draft.date <= today.value
+    ) {
+      selectedNutritionDate.value = draft.date
     }
 
     if (Array.isArray(draft?.foods) && draft.foods.length) {
@@ -927,15 +954,18 @@ const initializeNutritionDraft = async () => {
 }
 
 watch(
-  foods,
-  (currentFoods) => {
+  [foods, selectedNutritionDate],
+  ([currentFoods, currentDate]) => {
     if (!nutritionDraftKey.value) return
 
     if (currentFoods.length) {
-      const saved = saveActivityDraft(nutritionDraftKey.value, { foods: currentFoods })
+      const saved = saveActivityDraft(nutritionDraftKey.value, {
+        date: currentDate,
+        foods: currentFoods,
+      })
 
       if (saved && !nutritionDraftNotice.value) {
-        nutritionDraftNotice.value = 'Today’s pending meals are saved automatically on this device.'
+        nutritionDraftNotice.value = 'Pending meals and their date are saved automatically on this device.'
       }
     } else {
       clearActivityDraft(nutritionDraftKey.value)
@@ -954,6 +984,14 @@ onMounted(() => {
 
 const saveNutrition = async () => {
   if (isSaving.value || foods.value.length === 0) return
+
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(selectedNutritionDate.value) ||
+    selectedNutritionDate.value > today.value
+  ) {
+    formError.value = 'Please choose today or an earlier date.'
+    return
+  }
 
   isSaving.value = true
   formError.value = ''
@@ -974,7 +1012,7 @@ const saveNutrition = async () => {
           Authorization: idToken,
         },
         body: JSON.stringify({
-          date: toLocalDate(new Date()),
+          date: selectedNutritionDate.value,
           foods: foods.value,
         }),
       },
@@ -1157,6 +1195,7 @@ const deleteNutrition = async (nutritionId) => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 24px;
   margin-bottom: 34px;
 }
 
@@ -1178,6 +1217,41 @@ const deleteNutrition = async (nutritionId) => {
   color: #687083;
   font-size: 1.1rem;
   line-height: 1.55;
+}
+
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.log-date-control {
+  min-width: 175px;
+  padding: 8px 12px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #d9e1dc;
+  border-radius: 13px;
+  background: #fffefd;
+}
+
+.log-date-control span {
+  color: #68766f;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.log-date-control input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #17352c;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 750;
 }
 
 .account-pill {
@@ -1930,6 +2004,14 @@ const deleteNutrition = async (nutritionId) => {
   .main-content {
     padding: 32px 24px 48px;
   }
+
+  .topbar {
+    flex-direction: column;
+  }
+
+  .topbar-tools {
+    width: 100%;
+  }
 }
 
 @media (max-width: 600px) {
@@ -1940,6 +2022,10 @@ const deleteNutrition = async (nutritionId) => {
 
   .account-pill {
     display: none;
+  }
+
+  .log-date-control {
+    width: 100%;
   }
 
   .main-content {
