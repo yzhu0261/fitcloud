@@ -121,8 +121,8 @@ keeps a local fallback when the cloud profile API is unavailable. If another API
 
 ## Body measurements
 
-`backend/body-metrics` contains the authenticated CRUD handler for body measurement
-records. Create an on-demand DynamoDB table named `RepVeltaBodyMetrics` with
+`backend/body-metrics` contains the authenticated handler for body measurement
+records and weight goals. Create an on-demand DynamoDB table named `RepVeltaBodyMetrics` with
 `userId` (String) as the partition key and `metricId` (String) as the sort key.
 Deploy the handler as a Node.js 20 or later Lambda using `index.handler` and configure:
 
@@ -133,6 +133,8 @@ Grant the Lambda role `dynamodb:Query`, `dynamodb:PutItem`, `dynamodb:UpdateItem
 and `dynamodb:DeleteItem` on only the body metrics table. Attach it to a
 Cognito-protected API Gateway `ANY /body-metrics` route and set the endpoint as
 `VITE_BODY_METRICS_API_URL`. Until this variable is configured, the frontend uses
-per-user browser storage.
+per-user browser storage. The frontend uses `PATCH /body-metrics` to save a target
+weight in the same table under the reserved `GOAL` sort key, and calculates 7-day,
+30-day, and goal-progress summaries from the authenticated user's records.
 
 ![RepVelta AWS Architecture](docs/architecture/fitcloud-aws-architecture.png)

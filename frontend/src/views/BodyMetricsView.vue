@@ -8,7 +8,8 @@ import UserProfileBadge from '../components/UserProfileBadge.vue'
 import {
   createBodyMetric,
   deleteBodyMetric,
-  loadBodyMetrics,
+  loadBodyProgress,
+  saveBodyGoal,
   updateBodyMetric,
 } from '../services/bodyMetrics'
 
@@ -16,8 +17,11 @@ const router = useRouter()
 const metrics = ref([])
 const isLoading = ref(true)
 const isSaving = ref(false)
+const isGoalSaving = ref(false)
 const deletingId = ref('')
 const editingId = ref('')
+const targetWeightKg = ref(null)
+const goalInput = ref('')
 const pageError = ref('')
 const notice = ref('')
 
@@ -62,6 +66,46 @@ const weightChange = computed(() => {
   if (latestWeight.value === null || firstWeight.value === null) return null
   return Number(latestWeight.value) - Number(firstWeight.value)
 })
+
+const goalDistance = computed(() => {
+  if (latestWeight.value === null || targetWeightKg.value === null) return null
+  return Number(latestWeight.value) - Number(targetWeightKg.value)
+})
+
+const goalProgress = computed(() => {
+  if (targetWeightKg.value === null || latestWeight.value === null || firstWeight.value === null) {
+    return 0
+  }
+
+  const startingDistance = Math.abs(Number(firstWeight.value) - Number(targetWeightKg.value))
+  if (startingDistance === 0) return 100
+
+  const currentDistance = Math.abs(Number(latestWeight.value) - Number(targetWeightKg.value))
+  return Math.max(0, Math.min(100, Math.round(((startingDistance - currentDistance) / startingDistance) * 100)))
+})
+
+const periodStats = (days) => {
+  const cutoff = new Date()
+  cutoff.setHours(0, 0, 0, 0)
+  cutoff.setDate(cutoff.getDate() - (days - 1))
+
+  const records = weightRecords.value.filter((item) => {
+    const [year, month, day] = String(item.date).split('-').map(Number)
+    return new Date(year, month - 1, day) >= cutoff
+  })
+
+  if (!records.length) return { count: 0, average: null, change: null }
+
+  const values = records.map((item) => Number(item.weightKg))
+  return {
+    count: records.length,
+    average: values.reduce((sum, value) => sum + value, 0) / values.length,
+    change: values.length > 1 ? values.at(-1) - values[0] : null,
+  }
+}
+
+const weeklyStats = computed(() => periodStats(7))
+const monthlyStats = computed(() => periodStats(30))
 
 const latestValue = (key) =>
   sortedMetrics.value.find((item) => item[key] !== null && item[key] !== undefined)?.[key] ?? null
@@ -128,11 +172,37 @@ const loadMetrics = async () => {
   pageError.value = ''
 
   try {
-    metrics.value = await loadBodyMetrics()
+    const progress = await loadBodyProgress()
+    metrics.value = progress.metrics
+    targetWeightKg.value = progress.goal?.targetWeightKg ?? null
+    goalInput.value = targetWeightKg.value ?? ''
   } catch (error) {
     pageError.value = error.message || 'Your body measurements could not be loaded.'
   } finally {
     isLoading.value = false
+  }
+}
+
+const saveGoal = async () => {
+  const goal = Number(goalInput.value)
+  if (!Number.isFinite(goal) || goal < 20 || goal > 500) {
+    pageError.value = 'Target weight must be between 20 and 500 kg.'
+    return
+  }
+
+  isGoalSaving.value = true
+  pageError.value = ''
+  notice.value = ''
+
+  try {
+    const savedGoal = await saveBodyGoal(goal)
+    targetWeightKg.value = savedGoal.targetWeightKg
+    goalInput.value = savedGoal.targetWeightKg
+    notice.value = 'Target weight saved.'
+  } catch (error) {
+    pageError.value = error.message || 'Your target weight could not be saved.'
+  } finally {
+    isGoalSaving.value = false
   }
 }
 
@@ -247,6 +317,50 @@ onMounted(loadMetrics)
           <article class="summary-card pink-card"><span>Latest waist</span><strong>{{ latestWaist === null ? '—' : latestWaist }}</strong><small>{{ latestWaist === null ? 'Optional measurement' : 'cm' }}</small></article>
         </section>
 
+        <section class="progress-grid" aria-label="Weight goals and period analysis">
+          <article class="goal-card">
+            <div class="section-heading">
+              <div><p class="eyebrow">YOUR TARGET</p><h2>Weight goal</h2></div>
+              <span v-if="targetWeightKg !== null">{{ targetWeightKg }} kg target</span>
+            </div>
+            <form class="goal-form" @submit.prevent="saveGoal">
+              <label>
+                Target weight
+                <span class="goal-input"><input v-model.number="goalInput" type="number" min="20" max="500" step="0.1" placeholder="Set a target" /><small>kg</small></span>
+              </label>
+              <button type="submit" class="primary-button" :disabled="isGoalSaving">{{ isGoalSaving ? 'Saving…' : 'Save goal' }}</button>
+            </form>
+            <div v-if="targetWeightKg !== null" class="goal-status">
+              <div>
+                <strong v-if="goalDistance === null">Add a weight entry to track this goal</strong>
+                <strong v-else-if="Math.abs(goalDistance) < 0.05">Target reached</strong>
+                <strong v-else>{{ Math.abs(goalDistance).toFixed(1) }} kg {{ goalDistance > 0 ? 'to target' : 'below target' }}</strong>
+                <span>{{ goalProgress }}% progress from your first recorded weight</span>
+              </div>
+              <div class="goal-track" role="progressbar" :aria-valuenow="goalProgress" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${goalProgress}%` }"></span></div>
+            </div>
+            <p v-else class="goal-empty">Set a goal to see how your latest weight is moving toward it.</p>
+          </article>
+
+          <article class="period-card">
+            <p class="eyebrow">LAST 7 DAYS</p>
+            <h2>Weekly view</h2>
+            <strong>{{ weeklyStats.average === null ? '—' : weeklyStats.average.toFixed(1) }}</strong>
+            <span>{{ weeklyStats.average === null ? 'No weight entries' : 'kg average' }}</span>
+            <small v-if="weeklyStats.change !== null">{{ weeklyStats.change > 0 ? '+' : '' }}{{ weeklyStats.change.toFixed(1) }} kg change · {{ weeklyStats.count }} entries</small>
+            <small v-else>{{ weeklyStats.count }} {{ weeklyStats.count === 1 ? 'entry' : 'entries' }}</small>
+          </article>
+
+          <article class="period-card monthly-card">
+            <p class="eyebrow">LAST 30 DAYS</p>
+            <h2>Monthly view</h2>
+            <strong>{{ monthlyStats.average === null ? '—' : monthlyStats.average.toFixed(1) }}</strong>
+            <span>{{ monthlyStats.average === null ? 'No weight entries' : 'kg average' }}</span>
+            <small v-if="monthlyStats.change !== null">{{ monthlyStats.change > 0 ? '+' : '' }}{{ monthlyStats.change.toFixed(1) }} kg change · {{ monthlyStats.count }} entries</small>
+            <small v-else>{{ monthlyStats.count }} {{ monthlyStats.count === 1 ? 'entry' : 'entries' }}</small>
+          </article>
+        </section>
+
         <section class="trend-card" aria-labelledby="weight-trend-heading">
           <div class="section-heading">
             <div><p class="eyebrow">LAST 12 ENTRIES</p><h2 id="weight-trend-heading">Weight trend</h2></div>
@@ -312,11 +426,12 @@ onMounted(loadMetrics)
 .main-content { width: 100%; max-width: 1500px; margin: 0 auto; padding: 42px 50px 60px; }.topbar { margin-bottom: 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }.topbar h1 { margin: 5px 0 7px; font-size: 2.6rem; }.topbar > div > p:last-child { margin: 0; color: #596574; font-size: 1.08rem; }.eyebrow { margin: 0; color: #69766f; font-size: .86rem; font-weight: 850; letter-spacing: .11em; }
 .alert { margin-bottom: 18px; padding: 13px 15px; border-radius: 12px; font-size: .96rem; font-weight: 700; }.error-alert { border: 1px solid #efc7c0; background: #fff1ef; color: #9d342b; }.success-alert { border: 1px solid #cde0b4; background: #f1f8df; color: #3c642f; }
 .summary-grid { margin-bottom: 22px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }.summary-card { min-height: 170px; padding: 24px; border-radius: 19px; }.summary-card > span { display: block; margin-bottom: 20px; font-size: .96rem; font-weight: 750; }.summary-card strong { display: block; overflow: hidden; font-size: 2.8rem; line-height: 1; text-overflow: ellipsis; }.summary-card small { display: block; margin-top: 11px; color: #52615d; font-size: .9rem; }.blue-card { background: #dcefea; }.yellow-card { background: #fff1a8; }.lime-card { background: #e2f58b; }.pink-card { background: #f6dfe7; }
+.progress-grid { margin-bottom: 22px; display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(190px, .75fr)); gap: 18px; }.goal-card, .period-card { min-width: 0; padding: 24px; border: 1px solid #dfe7e2; border-radius: 20px; background: #fffefd; }.goal-card { background: linear-gradient(135deg, #f7fae8 0%, #edf5e8 100%); }.goal-card .section-heading { margin-bottom: 16px; }.goal-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; }.goal-form label { display: grid; gap: 8px; color: #344b43; font-size: .92rem; font-weight: 750; }.goal-input { display: flex; align-items: center; overflow: hidden; border: 1px solid #c9d6ce; border-radius: 11px; background: #fff; }.goal-input:focus-within { outline: 3px solid rgba(203, 237, 99, .35); border-color: #91ad43; }.goal-input input { min-width: 0; width: 100%; padding: 12px 13px; border: 0; outline: 0; background: transparent; color: #172033; font: inherit; font-size: 1rem; }.goal-input small { padding-right: 13px; color: #69766f; font-size: .84rem; font-weight: 750; }.goal-form .primary-button { min-height: 46px; padding: 0 18px; border-radius: 11px; font: inherit; font-size: .92rem; font-weight: 800; cursor: pointer; }.goal-form .primary-button:disabled { opacity: .55; cursor: wait; }.goal-status { margin-top: 18px; }.goal-status > div:first-child { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 10px; }.goal-status strong { color: #1d463a; font-size: .96rem; }.goal-status span, .goal-empty { color: #617069; font-size: .87rem; }.goal-track { height: 10px; overflow: hidden; border-radius: 999px; background: rgba(36, 76, 64, .12); }.goal-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8db743, #cbed63); transition: width .35s ease; }.goal-empty { margin: 20px 0 0; line-height: 1.5; }.period-card { display: flex; flex-direction: column; background: #e1efea; }.monthly-card { background: #fff0ba; }.period-card h2 { margin: 6px 0 22px; font-size: 1.2rem; }.period-card > strong { display: block; font-size: 2.5rem; line-height: 1; }.period-card > span { margin-top: 8px; color: #52615d; font-size: .88rem; }.period-card > small { margin-top: auto; padding-top: 18px; color: #52615d; font-size: .83rem; font-weight: 700; line-height: 1.4; }
 .trend-card, .content-card, .state-card { border: 1px solid #dfe7e2; border-radius: 20px; background: #fffefd; }.trend-card { margin-bottom: 22px; padding: 26px; }.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 21px; }.section-heading h2 { margin: 5px 0 0; font-size: 1.45rem; }.section-heading > span { color: #66736e; font-size: .9rem; font-weight: 700; }.weight-chart { height: 230px; display: grid; grid-template-columns: repeat(var(--entry-count), minmax(58px, 1fr)); gap: 11px; overflow-x: auto; }.weight-column { min-width: 58px; display: grid; grid-template-rows: 24px minmax(0, 1fr) 23px; gap: 7px; text-align: center; }.weight-column strong { color: #315e51; font-size: .82rem; }.weight-column small { color: #6b7772; font-size: .75rem; font-weight: 700; }.weight-track { position: relative; overflow: hidden; border-radius: 10px; background: #eff3f0; }.weight-track span { position: absolute; right: 0; bottom: 0; left: 0; border-radius: 10px 10px 5px 5px; background: linear-gradient(180deg, #cbed63, #779c2f); }
 .content-grid { display: grid; grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr); gap: 22px; align-items: start; }.content-card { padding: 26px; }.form-card form, .form-card label { display: grid; gap: 8px; }.form-card form { gap: 17px; }.form-card label { position: relative; color: #344b43; font-size: .92rem; font-weight: 750; }.form-card label > span { position: absolute; right: 12px; bottom: 14px; color: #718079; font-size: .78rem; }.form-card input, .form-card textarea { width: 100%; padding: 12px 13px; border: 1px solid #ccd8d1; border-radius: 11px; background: #fff; color: #172033; font: inherit; font-size: 1rem; }.form-card input:focus, .form-card textarea:focus { outline: 3px solid rgba(203, 237, 99, .35); border-color: #91ad43; }.measurement-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }.form-actions { display: flex; justify-content: flex-end; gap: 9px; }.form-actions button, .history-actions button { padding: 10px 14px; border-radius: 10px; font: inherit; font-size: .9rem; font-weight: 800; cursor: pointer; }.primary-button { border: 1px solid #244c40; background: #244c40; color: #fff; }.secondary-button { border: 1px solid #cbd5cf; background: #fff; color: #52615d; }.form-actions button:disabled, .history-actions button:disabled { opacity: .55; cursor: wait; }
 .history-list { display: grid; }.history-item { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 17px 0; border-top: 1px solid #edf0ee; }.history-item time { color: #58665f; font-size: .9rem; font-weight: 750; }.history-values { min-width: 0; display: flex; flex-wrap: wrap; gap: 5px 12px; }.history-values strong { color: #173f34; font-size: 1.08rem; }.history-values span { color: #5e6c66; font-size: .9rem; }.history-values p { width: 100%; margin: 4px 0 0; color: #6c7873; font-size: .88rem; line-height: 1.45; overflow-wrap: anywhere; }.history-actions { display: flex; gap: 7px; }.history-actions button { padding: 8px 10px; border: 1px solid #cbd5cf; background: #fff; color: #52615d; }.history-actions .delete-button { border-color: #e5c1bb; color: #a23a30; }
 .empty-state, .state-card { min-height: 190px; display: grid; place-items: center; align-content: center; color: #718079; text-align: center; }.state-card { padding: 30px; }.spinner { width: 34px; height: 34px; margin-bottom: 12px; border: 3px solid #e5e9ed; border-top-color: #89aa3d; border-radius: 50%; animation: spin .8s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 1180px) { .summary-grid { grid-template-columns: repeat(2, 1fr); }.content-grid { grid-template-columns: 1fr; } }
+@media (max-width: 1180px) { .summary-grid { grid-template-columns: repeat(2, 1fr); }.progress-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.goal-card { grid-column: 1 / -1; }.content-grid { grid-template-columns: 1fr; } }
 @media (max-width: 1000px) { .app-shell { grid-template-columns: 1fr; }.sidebar { display: none; }.main-content { padding: 32px 24px 48px; } }
-@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; }.topbar { align-items: flex-start; }.topbar :deep(.profile) { display: none; }.summary-grid, .measurement-grid { grid-template-columns: 1fr; }.history-item { grid-template-columns: 1fr; }.history-actions { width: 100%; }.history-actions button { flex: 1; }.section-heading { flex-direction: column; }.summary-card { min-height: 145px; } }
+@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; }.topbar { align-items: flex-start; }.topbar :deep(.profile) { display: none; }.summary-grid, .progress-grid, .measurement-grid { grid-template-columns: 1fr; }.goal-card { grid-column: auto; }.goal-form { grid-template-columns: 1fr; }.goal-status > div:first-child { flex-direction: column; gap: 5px; }.period-card { min-height: 190px; }.history-item { grid-template-columns: 1fr; }.history-actions { width: 100%; }.history-actions button { flex: 1; }.section-heading { flex-direction: column; }.summary-card { min-height: 145px; } }
 </style>

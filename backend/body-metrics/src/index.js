@@ -14,7 +14,7 @@ const tableName = process.env.BODY_METRICS_TABLE || 'RepVeltaBodyMetrics'
 const headers = {
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
   'Access-Control-Allow-Headers': 'authorization,content-type',
-  'Access-Control-Allow-Methods': 'OPTIONS,DELETE,GET,POST,PUT',
+  'Access-Control-Allow-Methods': 'OPTIONS,DELETE,GET,PATCH,POST,PUT',
   'Content-Type': 'application/json',
 }
 
@@ -54,6 +54,11 @@ const normalizeMetric = (body) => {
   return { date, weightKg, bodyFatPercent, waistCm, note }
 }
 
+const normalizeGoal = (body) => {
+  const targetWeightKg = optionalNumber(body?.targetWeightKg, 20, 500)
+  return targetWeightKg === null || Number.isNaN(targetWeightKg) ? null : { targetWeightKg }
+}
+
 export const handler = async (event) => {
   const method = event.requestContext?.http?.method || event.httpMethod || ''
 
@@ -72,7 +77,39 @@ export const handler = async (event) => {
         }),
       )
 
-      return response(200, { metrics: result.Items || [] })
+      const items = result.Items || []
+      const goalItem = items.find((item) => item.metricId === 'GOAL')
+
+      return response(200, {
+        metrics: items.filter((item) => item.metricId !== 'GOAL'),
+        goal: goalItem
+          ? { targetWeightKg: goalItem.targetWeightKg ?? null }
+          : { targetWeightKg: null },
+      })
+    }
+
+    if (method === 'PATCH') {
+      const goal = normalizeGoal(JSON.parse(event.body || '{}'))
+      if (!goal) return response(400, { message: 'Please provide a valid target weight.' })
+
+      const result = await dynamo.send(
+        new UpdateCommand({
+          TableName: tableName,
+          Key: { userId, metricId: 'GOAL' },
+          UpdateExpression:
+            'SET recordType = :recordType, targetWeightKg = :targetWeightKg, updatedAt = :updatedAt',
+          ExpressionAttributeValues: {
+            ':recordType': 'goal',
+            ':targetWeightKg': goal.targetWeightKg,
+            ':updatedAt': new Date().toISOString(),
+          },
+          ReturnValues: 'ALL_NEW',
+        }),
+      )
+
+      return response(200, {
+        goal: { targetWeightKg: result.Attributes?.targetWeightKg ?? null },
+      })
     }
 
     if (method === 'POST') {
