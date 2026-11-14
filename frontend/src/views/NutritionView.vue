@@ -865,7 +865,7 @@ const updateNutrition = async () => {
       {
         method: 'PUT',
         headers: {
-          Authorization: idToken,
+          Authorization: `Bearer ${idToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -907,7 +907,7 @@ const loadNutrition = async () => {
       'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
       {
         method: 'GET',
-        headers: { Authorization: idToken },
+        headers: { Authorization: `Bearer ${idToken}` },
       },
     )
     const result = await response.json()
@@ -1009,7 +1009,7 @@ const saveNutrition = async () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: idToken,
+          Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
           date: selectedNutritionDate.value,
@@ -1055,7 +1055,7 @@ const deleteNutrition = async (nutritionId) => {
       `https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition/${encodeURIComponent(nutritionId)}`,
       {
         method: 'DELETE',
-        headers: { Authorization: idToken },
+        headers: { Authorization: `Bearer ${idToken}` },
       },
     )
 

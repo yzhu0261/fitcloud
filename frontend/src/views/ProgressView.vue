@@ -5,14 +5,18 @@ import { RouterLink, useRouter } from 'vue-router'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
+import { loadBodyProgress } from '../services/bodyMetrics'
 
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 
 const router = useRouter()
 const workouts = ref([])
 const nutrition = ref([])
+const bodyMetrics = ref([])
+const targetWeightKg = ref(null)
 const isLoading = ref(true)
 const loadError = ref('')
+const loadWarnings = ref([])
 const showAllWorkouts = ref(false)
 const showAllNutrition = ref(false)
 const selectedRange = ref('30')
@@ -64,6 +68,45 @@ const workoutsInRange = computed(() =>
 const nutritionInRange = computed(() =>
   nutrition.value.filter((record) => !rangeStartDate.value || record.date >= rangeStartDate.value),
 )
+
+const bodyMetricsInRange = computed(() =>
+  bodyMetrics.value.filter(
+    (record) =>
+      Number.isFinite(Number(record.weightKg)) &&
+      (!rangeStartDate.value || record.date >= rangeStartDate.value),
+  ),
+)
+
+const bodyWeightTrend = computed(() =>
+  [...bodyMetricsInRange.value]
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .slice(-12),
+)
+
+const latestBodyWeight = computed(() => bodyWeightTrend.value.at(-1)?.weightKg ?? null)
+const bodyWeightChange = computed(() => {
+  if (bodyWeightTrend.value.length < 2) return null
+  return (
+    Number(bodyWeightTrend.value.at(-1).weightKg) - Number(bodyWeightTrend.value[0].weightKg)
+  )
+})
+const bodyGoalDistance = computed(() => {
+  if (latestBodyWeight.value === null || targetWeightKg.value === null) return null
+  return Number(latestBodyWeight.value) - Number(targetWeightKg.value)
+})
+const bodyTrendMinimum = computed(() =>
+  Math.min(...bodyWeightTrend.value.map((record) => Number(record.weightKg))),
+)
+const bodyTrendMaximum = computed(() =>
+  Math.max(...bodyWeightTrend.value.map((record) => Number(record.weightKg))),
+)
+const bodyBarHeight = (weight) => {
+  if (bodyTrendMaximum.value === bodyTrendMinimum.value) return '70%'
+  const ratio =
+    (Number(weight) - bodyTrendMinimum.value) /
+    (bodyTrendMaximum.value - bodyTrendMinimum.value)
+  return `${Math.round(28 + ratio * 72)}%`
+}
 
 const previousRange = computed(() => {
   if (selectedRange.value === 'all') return null
@@ -391,7 +434,7 @@ const toLocalDate = (date) => {
 
 const trendBuckets = computed(() => {
   const today = new Date(`${toLocalDate(new Date())}T00:00:00`)
-  const recordedDates = [...workouts.value, ...nutrition.value]
+  const recordedDates = [...workouts.value, ...nutrition.value, ...bodyMetrics.value]
     .map((record) => new Date(`${record.date}T00:00:00`))
     .filter((date) => !Number.isNaN(date.getTime()) && date <= today)
     .sort((a, b) => a - b)
@@ -537,6 +580,11 @@ const exportNutrition = () => {
 const loadProgress = async () => {
   isLoading.value = true
   loadError.value = ''
+  loadWarnings.value = []
+  workouts.value = []
+  nutrition.value = []
+  bodyMetrics.value = []
+  targetWeightKg.value = null
 
   try {
     const session = await fetchAuthSession()
@@ -546,30 +594,49 @@ const loadProgress = async () => {
       throw new Error('Your session has expired. Please sign in again.')
     }
 
-    const [workoutResponse, nutritionResponse] = await Promise.all([
+    const [workoutRequest, nutritionRequest, bodyRequest] = await Promise.allSettled([
       fetch(`${API_URL}/workouts`, {
         headers: { Authorization: `Bearer ${idToken}` },
       }),
       fetch(`${API_URL}/nutrition`, {
-        headers: { Authorization: idToken },
+        headers: { Authorization: `Bearer ${idToken}` },
       }),
+      loadBodyProgress().catch(() => null),
     ])
+    let loadedSources = 0
 
-    if (!workoutResponse.ok || !nutritionResponse.ok) {
-      throw new Error('We could not load all of your progress data.')
+    if (workoutRequest.status === 'fulfilled' && workoutRequest.value.ok) {
+      const workoutResult = await workoutRequest.value.json()
+      workouts.value = Array.isArray(workoutResult)
+        ? workoutResult
+        : (workoutResult.workouts ?? [])
+      loadedSources += 1
+    } else {
+      loadWarnings.value.push('Workout progress could not be loaded.')
     }
 
-    const [workoutResult, nutritionResult] = await Promise.all([
-      workoutResponse.json(),
-      nutritionResponse.json(),
-    ])
+    if (nutritionRequest.status === 'fulfilled' && nutritionRequest.value.ok) {
+      const nutritionResult = await nutritionRequest.value.json()
+      nutrition.value = Array.isArray(nutritionResult)
+        ? nutritionResult
+        : (nutritionResult.nutrition ?? [])
+      loadedSources += 1
+    } else {
+      loadWarnings.value.push('Nutrition progress could not be loaded.')
+    }
 
-    workouts.value = Array.isArray(workoutResult)
-      ? workoutResult
-      : (workoutResult.workouts ?? [])
-    nutrition.value = Array.isArray(nutritionResult)
-      ? nutritionResult
-      : (nutritionResult.nutrition ?? [])
+    const bodyResult = bodyRequest.status === 'fulfilled' ? bodyRequest.value : null
+    if (bodyResult) {
+      bodyMetrics.value = bodyResult.metrics ?? []
+      targetWeightKg.value = bodyResult.goal?.targetWeightKg ?? null
+      loadedSources += 1
+    } else {
+      loadWarnings.value.push('Body progress could not be loaded.')
+    }
+
+    if (loadedSources === 0) {
+      throw new Error('We could not load your progress data.')
+    }
   } catch (error) {
     loadError.value = error.message || 'Something went wrong while loading progress.'
   } finally {
@@ -635,6 +702,12 @@ onMounted(loadProgress)
       </div>
 
       <template v-else>
+        <div v-if="loadWarnings.length" class="partial-warning" role="status">
+          <strong>Some progress data is temporarily unavailable</strong>
+          <p v-for="warning in loadWarnings" :key="warning">{{ warning }}</p>
+          <button type="button" @click="loadProgress">Try again</button>
+        </div>
+
         <section class="period-toolbar" aria-label="Progress time range">
           <div>
             <p class="eyebrow">REPORTING PERIOD</p>
@@ -725,6 +798,59 @@ onMounted(loadProgress)
               </div>
             </div>
           </article>
+        </section>
+
+        <section class="body-overview-card" aria-labelledby="body-progress-heading">
+          <div class="body-overview-heading">
+            <div>
+              <p class="eyebrow">BODY PROGRESS</p>
+              <h2 id="body-progress-heading">Weight trend</h2>
+              <p>Your recorded weight changes during the selected reporting period.</p>
+            </div>
+            <RouterLink to="/body">View body metrics →</RouterLink>
+          </div>
+
+          <template v-if="bodyWeightTrend.length">
+            <div class="body-overview-grid">
+              <div class="body-overview-stats">
+                <article>
+                  <span>Latest weight</span>
+                  <strong>{{ Number(latestBodyWeight).toFixed(1) }} kg</strong>
+                </article>
+                <article>
+                  <span>Period change</span>
+                  <strong v-if="bodyWeightChange !== null">
+                    {{ bodyWeightChange > 0 ? '+' : '' }}{{ bodyWeightChange.toFixed(1) }} kg
+                  </strong>
+                  <strong v-else>Need 2 entries</strong>
+                </article>
+                <article>
+                  <span>Target distance</span>
+                  <strong v-if="bodyGoalDistance !== null">
+                    {{ Math.abs(bodyGoalDistance).toFixed(1) }} kg {{ bodyGoalDistance > 0 ? 'above' : bodyGoalDistance < 0 ? 'below' : 'at target' }}
+                  </strong>
+                  <strong v-else>No target set</strong>
+                </article>
+              </div>
+
+              <div
+                class="body-mini-chart"
+                :style="{ '--body-count': bodyWeightTrend.length }"
+                role="img"
+                :aria-label="`Weight trend with ${bodyWeightTrend.length} entries during the selected ${rangeLabel.toLowerCase()} period`"
+              >
+                <div v-for="record in bodyWeightTrend" :key="record.metricId" class="body-mini-column" :title="`${formatDate(record.date)}: ${record.weightKg} kg`">
+                  <strong>{{ record.weightKg }}</strong>
+                  <div><span :style="{ height: bodyBarHeight(record.weightKg) }"></span></div>
+                  <small>{{ formatDate(record.date).replace(/ \d{4}$/, '') }}</small>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <div v-else class="balance-empty body-empty">
+            No weight entries were recorded during this period. <RouterLink to="/body">Add a measurement</RouterLink>
+          </div>
         </section>
 
         <section class="balance-card" aria-labelledby="training-balance-heading">
@@ -991,6 +1117,24 @@ onMounted(loadProgress)
 .bar-track span { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 10px 10px 6px 6px; transition: height .35s ease; }
 .training-bar { background: linear-gradient(180deg, #cbed63, #88ad3b); }
 .calorie-bar { background: linear-gradient(180deg, #ffd967, #e6a835); }
+.body-overview-card { margin-bottom: 24px; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: linear-gradient(135deg, #fffefd, #f9edf1); }
+.body-overview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.body-overview-heading h2 { margin: 6px 0 5px; font-size: 1.48rem; }
+.body-overview-heading div > p:last-child { margin: 0; color: #64716d; font-size: .98rem; line-height: 1.5; }
+.body-overview-heading > a { color: #315e51; font-size: .94rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.body-overview-heading > a:hover { text-decoration: underline; }
+.body-overview-grid { display: grid; grid-template-columns: minmax(245px, .58fr) minmax(0, 1.42fr); gap: 26px; align-items: stretch; }
+.body-overview-stats { display: grid; gap: 10px; }
+.body-overview-stats article { padding: 15px 17px; border: 1px solid rgba(109, 129, 120, .16); border-radius: 13px; background: rgba(255, 255, 255, .72); }
+.body-overview-stats span { display: block; margin-bottom: 5px; color: #68746f; font-size: .84rem; font-weight: 750; }
+.body-overview-stats strong { color: #243d35; font-size: 1.08rem; }
+.body-mini-chart { min-height: 230px; display: grid; grid-template-columns: repeat(var(--body-count), minmax(54px, 1fr)); gap: 9px; overflow-x: auto; }
+.body-mini-column { min-width: 54px; display: grid; grid-template-rows: 24px minmax(0, 1fr) 24px; gap: 7px; text-align: center; }
+.body-mini-column > strong { color: #315e51; font-size: .78rem; }
+.body-mini-column > small { color: #6d7874; font-size: .72rem; font-weight: 700; }
+.body-mini-column > div { position: relative; overflow: hidden; border-radius: 9px; background: rgba(97, 120, 111, .09); }
+.body-mini-column > div span { position: absolute; right: 0; bottom: 0; left: 0; border-radius: 9px 9px 4px 4px; background: linear-gradient(180deg, #f1b9c9, #b85e7b); }
+.body-empty a { color: #315e51; font-weight: 800; }
 .balance-card { margin-bottom: 24px; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
 .balance-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .balance-heading h2 { margin: 6px 0 5px; font-size: 1.48rem; }
@@ -1067,12 +1211,16 @@ onMounted(loadProgress)
 .history-toggle:hover { border-color: #b8ca75; background: #f1f7d9; }
 .state-card { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 12px; color: #68707d; text-align: center; }
 .state-card p { margin: 0; }
+.partial-warning { margin-bottom: 22px; padding: 17px 19px; border: 1px solid #e4d29a; border-radius: 14px; background: #fff9df; color: #5f5125; }
+.partial-warning strong { display: block; margin-bottom: 6px; font-size: 1rem; }
+.partial-warning p { margin: 4px 0; font-size: .94rem; line-height: 1.45; }
+.partial-warning button { margin-top: 10px; padding: 8px 12px; border: 1px solid #cbb873; border-radius: 9px; background: #fff; color: #5f5125; font: inherit; font-size: .88rem; font-weight: 800; cursor: pointer; }
 .spinner { width: 34px; height: 34px; border: 3px solid #e5e9ed; border-top-color: #95ad31; border-radius: 50%; animation: spin .8s linear infinite; }
 .error-state strong { color: #a52b20; }
 .retry-button { padding: 11px 17px; border: 0; border-radius: 10px; background: #cbed63; color: #17352c; font-size: 1rem; font-weight: 700; cursor: pointer; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1200px) { .topbar { align-items: flex-start; }.topbar-actions { flex-direction: column-reverse; align-items: flex-end; }.summary-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.period-toolbar { align-items: flex-start; flex-direction: column; }.trend-grid, .achievement-grid, .history-grid { grid-template-columns: 1fr; } }
-@media (max-width: 700px) { .balance-grid { grid-template-columns: 1fr; }.balance-heading, .progression-heading { flex-direction: column; }.balance-heading > span { white-space: normal; }.exercise-picker { width: 100%; min-width: 0; } }
+@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.period-toolbar { align-items: flex-start; flex-direction: column; }.trend-grid, .achievement-grid, .history-grid, .body-overview-grid { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .balance-grid { grid-template-columns: 1fr; }.balance-heading, .progression-heading, .body-overview-heading { flex-direction: column; }.balance-heading > span { white-space: normal; }.exercise-picker { width: 100%; min-width: 0; } }
 @media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid, .progression-summary { grid-template-columns: 1fr; } .export-actions { width: 100%; }.period-toolbar > div:last-child { width: 100%; }.period-toolbar button { flex: 1; }.bar-chart { overflow-x: auto; }.date-badge { width: 80px; flex-basis: 80px; }.achievement-heading { flex-direction: column; }.best-item { grid-template-columns: 34px minmax(0, 1fr); }.best-weight { grid-column: 2; } }
 </style>

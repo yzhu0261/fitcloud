@@ -6,6 +6,7 @@ import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import AppIcon from '../components/AppIcon.vue'
+import { loadBodyProgress } from '../services/bodyMetrics'
 import { loadCurrentProfilePreferences } from '../services/profilePreferences'
 import {
   getTodayPlanDay,
@@ -22,11 +23,13 @@ const nutrition = ref([])
 const weeklyWorkoutGoal = ref(3)
 const dailyCalorieGoal = ref(2000)
 const weeklyPlan = ref(null)
+const bodyProgress = ref({ metrics: [], goal: { targetWeightKg: null } })
 const todayPlan = computed(() => getTodayPlanDay(weeklyPlan.value))
 const isUpdatingPlan = ref(false)
 const planActionError = ref('')
 const isLoading = ref(true)
 const loadError = ref('')
+const loadWarnings = ref([])
 
 // Sign the current user out and return to the login page.
 const handleLogout = async () => {
@@ -68,7 +71,7 @@ const loadNutrition = async () => {
   const response = await fetch(
     'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
     {
-      headers: { Authorization: idToken },
+      headers: { Authorization: `Bearer ${idToken}` },
     },
   )
 
@@ -196,6 +199,66 @@ const calorieGoalMessage = computed(() => {
   return 'Daily target reached'
 })
 
+const weightEntries = computed(() =>
+  (bodyProgress.value.metrics ?? [])
+    .filter((item) => Number.isFinite(Number(item.weightKg)))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date))),
+)
+
+const latestBodyWeight = computed(() => weightEntries.value.at(-1)?.weightKg ?? null)
+const previousBodyWeight = computed(() => weightEntries.value.at(-2)?.weightKg ?? null)
+const targetBodyWeight = computed(() => bodyProgress.value.goal?.targetWeightKg ?? null)
+
+const bodyWeightChange = computed(() => {
+  if (latestBodyWeight.value === null || previousBodyWeight.value === null) return null
+  return Number(latestBodyWeight.value) - Number(previousBodyWeight.value)
+})
+
+const bodyGoalProgress = computed(() => {
+  if (!weightEntries.value.length || targetBodyWeight.value === null) return 0
+
+  const startingOffset = Number(weightEntries.value[0].weightKg) - Number(targetBodyWeight.value)
+  const currentOffset = Number(latestBodyWeight.value) - Number(targetBodyWeight.value)
+  const startingDistance = Math.abs(startingOffset)
+
+  if (startingDistance < 0.05) return Math.abs(currentOffset) < 0.05 ? 100 : 0
+  if (Math.abs(currentOffset) < 0.05 || Math.sign(startingOffset) !== Math.sign(currentOffset)) {
+    return 100
+  }
+
+  return Math.max(
+    0,
+    Math.min(100, Math.round(((startingDistance - Math.abs(currentOffset)) / startingDistance) * 100)),
+  )
+})
+
+const bodyGoalMessage = computed(() => {
+  if (latestBodyWeight.value === null) return 'Log a weight to start tracking'
+  if (targetBodyWeight.value === null) return 'Add a target weight on the Body Metrics page'
+
+  const difference = Number(latestBodyWeight.value) - Number(targetBodyWeight.value)
+  if (Math.abs(difference) < 0.05) return 'Target weight reached'
+
+  return `${Math.abs(difference).toFixed(1)} kg ${difference > 0 ? 'above' : 'below'} target`
+})
+
+const bodyTrendMessage = computed(() => {
+  if (bodyWeightChange.value === null) return 'Add another entry to see your latest change'
+  if (Math.abs(bodyWeightChange.value) < 0.05) return 'No change since your previous entry'
+
+  return `${Math.abs(bodyWeightChange.value).toFixed(1)} kg ${bodyWeightChange.value < 0 ? 'down' : 'up'} since your previous entry`
+})
+
+const loadBodySummary = async () => {
+  try {
+    bodyProgress.value = await loadBodyProgress()
+    return true
+  } catch {
+    bodyProgress.value = { metrics: [], goal: { targetWeightKg: null } }
+    return false
+  }
+}
+
 const loadGoals = async () => {
   try {
     const profile = await loadCurrentProfilePreferences()
@@ -242,9 +305,33 @@ const toggleTodayPlan = async () => {
 const loadDashboard = async () => {
   isLoading.value = true
   loadError.value = ''
+  loadWarnings.value = []
+  workouts.value = []
+  nutrition.value = []
 
   try {
-    await Promise.all([loadWorkouts(), loadNutrition()])
+    const results = await Promise.allSettled([
+      loadWorkouts(),
+      loadNutrition(),
+      loadBodySummary(),
+    ])
+    const primaryFailures = []
+
+    if (results[0].status === 'rejected') primaryFailures.push('workout history')
+    if (results[1].status === 'rejected') primaryFailures.push('nutrition history')
+    if (results[2].status === 'fulfilled' && !results[2].value) {
+      loadWarnings.value.push('Body progress is temporarily unavailable.')
+    }
+
+    if (primaryFailures.length === 2) {
+      throw new Error('Your workout and nutrition data could not be loaded.')
+    }
+
+    if (primaryFailures.length) {
+      loadWarnings.value.push(
+        `Your ${primaryFailures[0]} could not be loaded. The rest of your dashboard is still available.`,
+      )
+    }
   } catch (error) {
     loadError.value = error.message || 'Your dashboard could not be loaded.'
   } finally {
@@ -323,6 +410,12 @@ onUnmounted(() => {
       </div>
 
       <template v-else>
+        <div v-if="loadWarnings.length" class="partial-warning" role="status">
+          <strong>Some information could not be refreshed</strong>
+          <p v-for="warning in loadWarnings" :key="warning">{{ warning }}</p>
+          <button type="button" @click="loadDashboard">Try again</button>
+        </div>
+
         <!-- Display a summary of the user's workout activity. -->
         <section class="summary-grid">
           <article class="summary-card blue-card">
@@ -405,6 +498,29 @@ onUnmounted(() => {
 
             <span>{{ calorieGoalMessage }}</span>
             <RouterLink to="/nutrition" class="goal-link">Log nutrition →</RouterLink>
+          </article>
+
+          <article class="goal-card body-goal">
+            <p>Body Progress</p>
+
+            <div class="goal-heading">
+              <strong>{{ latestBodyWeight === null ? '—' : latestBodyWeight }}</strong>
+              <span>{{ latestBodyWeight === null ? 'No weight yet' : 'kg latest' }}</span>
+            </div>
+
+            <div
+              class="goal-progress body-progress"
+              role="progressbar"
+              :aria-valuenow="bodyGoalProgress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span :style="{ width: `${bodyGoalProgress}%` }"></span>
+            </div>
+
+            <span>{{ bodyGoalMessage }}</span>
+            <small class="goal-detail">{{ bodyTrendMessage }}</small>
+            <RouterLink to="/body" class="goal-link">View body metrics →</RouterLink>
           </article>
         </section>
 
@@ -771,6 +887,17 @@ onUnmounted(() => {
   border-color: #efc4bd;
   background: #fff5f3;
 }
+.partial-warning {
+  margin-bottom: 22px;
+  padding: 17px 19px;
+  border: 1px solid #e4d29a;
+  border-radius: 14px;
+  background: #fff9df;
+  color: #5f5125;
+}
+.partial-warning strong { display: block; margin-bottom: 6px; font-size: 1rem; }
+.partial-warning p { margin: 4px 0; font-size: .94rem; line-height: 1.45; }
+.partial-warning button { margin-top: 10px; padding: 8px 12px; border: 1px solid #cbb873; border-radius: 9px; background: #fff; color: #5f5125; font: inherit; font-size: .88rem; font-weight: 800; cursor: pointer; }
 .spinner {
   width: 34px;
   height: 34px;
@@ -833,7 +960,7 @@ onUnmounted(() => {
 
 .goals-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
   margin-bottom: 24px;
 }
@@ -852,6 +979,10 @@ onUnmounted(() => {
 
 .nutrition-goal {
   background: #fff3bd;
+}
+
+.body-goal {
+  background: #f6e4ea;
 }
 
 .goal-card > p {
@@ -905,6 +1036,19 @@ onUnmounted(() => {
 
 .calorie-progress span {
   background: #d19b2d;
+}
+
+.body-progress span {
+  background: #b85d7b;
+}
+
+.goal-detail {
+  display: block;
+  margin-top: 6px;
+  color: #6c6670;
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .goal-link {
