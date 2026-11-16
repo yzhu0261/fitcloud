@@ -11,9 +11,18 @@ import {
   saveCurrentProfilePreferences,
 } from '../services/profilePreferences'
 import { clearCurrentUserActivityDrafts } from '../services/activityDrafts'
-import { clearCurrentUserBodyMetrics } from '../services/bodyMetrics'
+import { clearCurrentUserBodyMetrics, loadBodyProgress } from '../services/bodyMetrics'
+import { clearCoachConversation, loadCoachConversation } from '../services/coachConversation'
+import { clearCurrentUserHydration, loadHydrationHistory } from '../services/hydration'
+import { clearCurrentUserWeeklyPlanCache, loadWeeklyPlan } from '../services/weeklyPlan'
+import {
+  clearCurrentUserWorkoutTemplates,
+  getWorkoutTemplateKey,
+  loadWorkoutTemplates,
+} from '../services/workoutTemplates'
 import {
   deleteUser,
+  fetchAuthSession,
   fetchUserAttributes,
   getCurrentUser,
   signOut,
@@ -44,6 +53,11 @@ const isLoading = ref(true)
 const isSavingProfile = ref(false)
 const isSavingPassword = ref(false)
 const isDeletingAccount = ref(false)
+const isExportingData = ref(false)
+const dataExportMessage = ref('')
+const dataExportError = ref('')
+
+const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 
 const loadAccount = async () => {
   isLoading.value = true
@@ -165,9 +179,92 @@ const handleLogout = async () => {
   router.push('/login')
 }
 
+const downloadAccountData = async () => {
+  if (isExportingData.value) return
+
+  isExportingData.value = true
+  dataExportMessage.value = ''
+  dataExportError.value = ''
+
+  try {
+    const session = await fetchAuthSession()
+    const idToken = session.tokens?.idToken?.toString()
+
+    if (!idToken) throw new Error('Your session has expired. Please sign in again.')
+
+    const fetchRecords = async (path, property) => {
+      const response = await fetch(`${API_URL}${path}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      const result = await response.json()
+
+      if (!response.ok) throw new Error(result.message || `${property} could not be loaded.`)
+      return Array.isArray(result) ? result : (result[property] ?? [])
+    }
+
+    const results = await Promise.allSettled([
+      fetchRecords('/workouts', 'workouts'),
+      fetchRecords('/nutrition', 'nutrition'),
+      loadBodyProgress(),
+      loadWeeklyPlan(),
+      loadCoachConversation(),
+      getWorkoutTemplateKey().then(loadWorkoutTemplates),
+    ])
+    const warnings = []
+    const resultValue = (index, fallback, label) => {
+      const result = results[index]
+
+      if (result.status === 'fulfilled') return result.value
+      warnings.push(`${label} could not be included.`)
+      return fallback
+    }
+    const exportData = {
+      format: 'RepVelta account export',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      account: {
+        username: username.value,
+        email: email.value,
+        profile: {
+          displayName: displayName.value,
+          weeklyWorkoutGoal: weeklyWorkoutGoal.value,
+          dailyCalorieGoal: dailyCalorieGoal.value,
+        },
+      },
+      workouts: resultValue(0, [], 'Workout history'),
+      nutrition: resultValue(1, [], 'Nutrition history'),
+      bodyProgress: resultValue(2, { metrics: [], goal: null }, 'Body progress'),
+      weeklyPlan: resultValue(3, null, 'Weekly plan'),
+      coachConversation: resultValue(4, [], 'AI Coach conversation'),
+      workoutTemplates: resultValue(5, [], 'Workout templates'),
+      hydration: loadHydrationHistory(username.value),
+      warnings,
+    }
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    })
+    const downloadUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = downloadUrl
+    link.download = `repvelta-account-data-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(downloadUrl)
+    dataExportMessage.value = warnings.length
+      ? `Your data file was downloaded with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}. See the warnings field in the file.`
+      : 'Your account data was downloaded successfully.'
+  } catch (error) {
+    dataExportError.value = error.message || 'Your account data could not be downloaded.'
+  } finally {
+    isExportingData.value = false
+  }
+}
+
 const handleDeleteAccount = async () => {
   const confirmed = window.confirm(
-    'Delete your RepVelta account and all saved workouts, nutrition records, plans, and profile settings permanently? This cannot be undone.',
+    'Delete your RepVelta account and all cloud and device data permanently, including workouts, nutrition, body metrics, hydration, templates, plans, and AI Coach history? This cannot be undone.',
   )
 
   if (!confirmed) return
@@ -177,8 +274,14 @@ const handleDeleteAccount = async () => {
 
   try {
     await deleteCurrentProfilePreferences()
-    await clearCurrentUserActivityDrafts()
-    await clearCurrentUserBodyMetrics()
+    await Promise.all([
+      clearCurrentUserActivityDrafts(),
+      clearCurrentUserBodyMetrics(),
+      clearCoachConversation(),
+      clearCurrentUserHydration(),
+      clearCurrentUserWeeklyPlanCache(),
+      clearCurrentUserWorkoutTemplates(),
+    ])
     await deleteUser()
     router.push('/register')
   } catch (error) {
@@ -346,11 +449,30 @@ onBeforeUnmount(() => {
             </form>
           </article>
 
-          <section v-else class="danger-card">
+          <template v-else>
+          <section class="data-export-card">
+            <div>
+              <p class="eyebrow">YOUR DATA</p>
+              <h2>Download account data</h2>
+              <p>Save a JSON copy of your profile, activity records, plans, templates, hydration, and AI Coach conversation before deleting your account.</p>
+              <p v-if="dataExportMessage" class="export-message">{{ dataExportMessage }}</p>
+              <p v-if="dataExportError" class="export-message export-error">{{ dataExportError }}</p>
+            </div>
+            <button
+              type="button"
+              class="export-data-button"
+              :disabled="isExportingData"
+              @click="downloadAccountData"
+            >
+              {{ isExportingData ? 'Preparing download...' : 'Download my data' }}
+            </button>
+          </section>
+
+          <section class="danger-card">
             <div>
               <p class="eyebrow">DANGER ZONE</p>
               <h2>Delete account</h2>
-              <p>Permanently delete your profile, workouts, nutrition records, plans, Cognito account, and sign-in access. Your account cannot be restored after deletion.</p>
+              <p>Permanently delete your profile, workouts, nutrition records, body data, plans, hydration history, workout templates, AI Coach conversation, Cognito account, and sign-in access. Your account cannot be restored after deletion.</p>
             </div>
             <button
               type="button"
@@ -361,6 +483,7 @@ onBeforeUnmount(() => {
               {{ isDeletingAccount ? 'Deleting...' : 'Delete my account' }}
             </button>
           </section>
+          </template>
         </section>
       </template>
     </section>
@@ -418,6 +541,14 @@ onBeforeUnmount(() => {
 .error-text { background: #fff2f0; color: #a52b20; }
 .primary-button { min-height: 52px; padding: 13px 20px; border: 0; border-radius: 12px; background: #cbed63; color: #17352c; font-size: 1rem; font-weight: 850; cursor: pointer; }
 .primary-button:disabled { opacity: .65; cursor: wait; }
+.data-export-card { margin-bottom: 20px; padding: 28px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border: 1px solid #cddfd6; border-radius: 20px; background: linear-gradient(135deg, #fffefd, #eaf3ed); }
+.data-export-card h2 { margin: 6px 0 8px; font-size: 1.35rem; }
+.data-export-card > div > p:nth-of-type(2) { max-width: 700px; margin: 0; color: #586a63; font-size: 1rem; line-height: 1.55; }
+.export-data-button { flex: 0 0 auto; min-height: 48px; padding: 11px 17px; border: 1px solid #8daa9a; border-radius: 12px; background: #fff; color: #315e51; font: inherit; font-size: .96rem; font-weight: 800; cursor: pointer; }
+.export-data-button:hover:not(:disabled) { border-color: #779f45; background: #f0f7db; }
+.export-data-button:disabled { opacity: .6; cursor: wait; }
+.data-export-card .export-message { margin: 12px 0 0; padding: 9px 11px; border-radius: 9px; background: #e8f3e4; color: #315e51; font-size: .9rem; font-weight: 700; }
+.data-export-card .export-error { background: #fff2f0; color: #a52b20; }
 .danger-card { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px; border: 1px solid #efc8c3; border-radius: 20px; background: #fff9f8; }
 .danger-card h2 { margin: 6px 0 8px; font-size: 1.35rem; }
 .danger-card > div > p:last-child { margin: 0; color: #6f5f5d; font-size: 1rem; }
@@ -425,5 +556,5 @@ onBeforeUnmount(() => {
 .danger-button:hover { background: #fff0ee; }
 .danger-button:disabled { opacity: .6; cursor: wait; }
 @media (max-width: 1000px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } }
-@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .topbar { align-items: flex-start; } .back-link { display: none; } .goal-grid { grid-template-columns: 1fr; } .danger-card { align-items: flex-start; flex-direction: column; } .danger-button { width: 100%; } }
+@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .topbar { align-items: flex-start; } .back-link { display: none; } .goal-grid { grid-template-columns: 1fr; } .danger-card, .data-export-card { align-items: flex-start; flex-direction: column; } .danger-button, .export-data-button { width: 100%; } }
 </style>

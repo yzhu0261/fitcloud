@@ -96,6 +96,73 @@
         </p>
       </section>
 
+      <section class="hydration-card" aria-labelledby="hydration-heading">
+        <div class="hydration-visual" aria-hidden="true">
+          <span>H<sub>2</sub>O</span>
+        </div>
+
+        <div class="hydration-content">
+          <div class="hydration-heading-row">
+            <div>
+              <p class="eyebrow">HYDRATION</p>
+              <h2 id="hydration-heading">Daily water</h2>
+              <p>
+                {{ hydrationIntakeMl.toLocaleString('en-AU') }} of
+                {{ hydrationGoalMl.toLocaleString('en-AU') }} ml for
+                {{ isSelectedToday ? 'today' : selectedDateLabel }}
+              </p>
+            </div>
+
+            <strong>{{ hydrationProgress }}%</strong>
+          </div>
+
+          <div
+            class="hydration-progress"
+            role="progressbar"
+            :aria-label="`${hydrationProgress}% of daily water target`"
+            :aria-valuenow="hydrationProgress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <span :style="{ width: `${hydrationProgress}%` }"></span>
+          </div>
+
+          <div class="hydration-controls">
+            <div class="water-actions" aria-label="Update water intake">
+              <button type="button" @click="addWater(250)">+ 250 ml</button>
+              <button type="button" @click="addWater(500)">+ 500 ml</button>
+              <button
+                type="button"
+                class="water-undo"
+                :disabled="hydrationIntakeMl === 0"
+                @click="removeWater(250)"
+              >
+                Undo 250 ml
+              </button>
+            </div>
+
+            <label class="water-goal-control">
+              <span>Daily goal</span>
+              <span class="water-goal-input">
+                <input
+                  v-model.number="hydrationGoalMl"
+                  type="number"
+                  min="500"
+                  max="10000"
+                  step="250"
+                  @change="saveHydrationGoal"
+                />
+                <small>ml</small>
+              </span>
+            </label>
+          </div>
+
+          <p class="hydration-note" aria-live="polite">
+            {{ hydrationNotice || 'Saved on this device for the selected date.' }}
+          </p>
+        </div>
+      </section>
+
       <!-- Add Food form. -->
       <section id="add-food" class="content-card">
         <div class="section-heading">
@@ -338,7 +405,7 @@
         <!-- Display each saved nutrition record. -->
         <div v-else class="history-list">
           <article
-            v-for="record in filteredNutritionHistory"
+            v-for="record in displayedNutritionHistory"
             :key="record.nutritionId"
             class="history-item"
           >
@@ -453,6 +520,20 @@
               </div>
             </template>
           </article>
+
+          <div v-if="filteredNutritionHistory.length > HISTORY_PAGE_SIZE" class="history-pagination">
+            <span>Showing {{ displayedNutritionHistory.length }} of {{ filteredNutritionHistory.length }}</span>
+            <button
+              v-if="displayedNutritionHistory.length < filteredNutritionHistory.length"
+              type="button"
+              @click="nutritionHistoryLimit += HISTORY_PAGE_SIZE"
+            >
+              Load more
+            </button>
+            <button v-else type="button" @click="nutritionHistoryLimit = HISTORY_PAGE_SIZE">
+              Show less
+            </button>
+          </div>
         </div>
       </section>
     </main>
@@ -461,12 +542,13 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { fetchAuthSession, signOut } from 'aws-amplify/auth'
+import { useRoute, useRouter } from 'vue-router'
+import { fetchAuthSession, getCurrentUser, signOut } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import { loadCurrentProfilePreferences } from '../services/profilePreferences'
+import { loadHydration, saveHydration } from '../services/hydration'
 import {
   clearActivityDraft,
   getActivityDraftKey,
@@ -475,6 +557,7 @@ import {
 } from '../services/activityDrafts'
 
 const router = useRouter()
+const route = useRoute()
 
 const FOOD_PRESETS = [
   { foodName: 'Chicken Breast (100 g)', calories: 165, protein: 31, carbs: 0, fat: 3.6 },
@@ -486,6 +569,7 @@ const FOOD_PRESETS = [
   { foodName: 'Salmon (100 g)', calories: 208, protein: 20, carbs: 0, fat: 13 },
   { foodName: 'Whey Protein (1 scoop)', calories: 120, protein: 24, carbs: 3, fat: 2 },
 ]
+const HISTORY_PAGE_SIZE = 6
 
 // Store the user's food input.
 const foodName = ref('')
@@ -494,6 +578,10 @@ const protein = ref('')
 const carbs = ref('')
 const fat = ref('')
 const dailyCalorieGoal = ref(2000)
+const hydrationGoalMl = ref(2000)
+const hydrationIntakeMl = ref(0)
+const hydrationUsername = ref('')
+const hydrationNotice = ref('')
 
 // Store food records added to today's meals.
 const foods = ref([])
@@ -507,6 +595,7 @@ const historySearch = ref('')
 const historyDateFrom = ref('')
 const historyDateTo = ref('')
 const mealActionNotice = ref('')
+const nutritionHistoryLimit = ref(HISTORY_PAGE_SIZE)
 
 const toLocalDate = (date) => {
   const year = date.getFullYear()
@@ -516,8 +605,14 @@ const toLocalDate = (date) => {
   return `${year}-${month}-${day}`
 }
 
+const requestedNutritionDate = () => {
+  const date = typeof route.query.date === 'string' ? route.query.date : ''
+  const currentDate = toLocalDate(new Date())
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= currentDate ? date : currentDate
+}
+
 const today = computed(() => toLocalDate(new Date()))
-const selectedNutritionDate = ref(toLocalDate(new Date()))
+const selectedNutritionDate = ref(requestedNutritionDate())
 const isSelectedToday = computed(() => selectedNutritionDate.value === today.value)
 const selectedDateLabel = computed(() => {
   const parsed = new Date(`${selectedNutritionDate.value}T00:00:00`)
@@ -552,6 +647,10 @@ const filteredNutritionHistory = computed(() => {
     return matchesSearch && matchesStart && matchesEnd
   })
 })
+
+const displayedNutritionHistory = computed(() =>
+  filteredNutritionHistory.value.slice(0, nutritionHistoryLimit.value),
+)
 
 const hasHistoryFilters = computed(() =>
   Boolean(historySearch.value || historyDateFrom.value || historyDateTo.value),
@@ -668,6 +767,71 @@ const calorieGoalMessage = computed(() => {
   if (difference < 0) return `${Math.abs(difference).toLocaleString('en-AU')} kcal above your target`
   return 'Daily target reached'
 })
+
+const hydrationProgress = computed(() => {
+  const goal = Number(hydrationGoalMl.value)
+
+  if (!Number.isFinite(goal) || goal <= 0) return 0
+  return Math.min(100, Math.round((hydrationIntakeMl.value / goal) * 100))
+})
+
+const persistHydration = () => {
+  if (!hydrationUsername.value) return
+
+  const saved = saveHydration(hydrationUsername.value, selectedNutritionDate.value, {
+    intakeMl: hydrationIntakeMl.value,
+    goalMl: hydrationGoalMl.value,
+  })
+
+  hydrationIntakeMl.value = saved.intakeMl
+  hydrationGoalMl.value = saved.goalMl
+}
+
+const loadHydrationForDate = () => {
+  hydrationNotice.value = ''
+
+  const saved = loadHydration(hydrationUsername.value, selectedNutritionDate.value)
+  hydrationIntakeMl.value = saved.intakeMl
+  hydrationGoalMl.value = saved.goalMl
+}
+
+const initializeHydration = async () => {
+  try {
+    const user = await getCurrentUser()
+    hydrationUsername.value = user.username
+    loadHydrationForDate()
+  } catch {
+    hydrationUsername.value = ''
+  }
+}
+
+const addWater = (amount) => {
+  hydrationIntakeMl.value = Math.min(20000, hydrationIntakeMl.value + amount)
+  hydrationNotice.value = `${amount} ml added for ${isSelectedToday.value ? 'today' : selectedDateLabel.value}.`
+  persistHydration()
+}
+
+const removeWater = (amount) => {
+  const previousIntake = hydrationIntakeMl.value
+  hydrationIntakeMl.value = Math.max(0, hydrationIntakeMl.value - amount)
+
+  if (previousIntake === hydrationIntakeMl.value) return
+  hydrationNotice.value = 'The most recent 250 ml was removed.'
+  persistHydration()
+}
+
+const saveHydrationGoal = () => {
+  const goal = Number(hydrationGoalMl.value)
+
+  if (!Number.isFinite(goal)) {
+    hydrationGoalMl.value = 2000
+  } else {
+    hydrationGoalMl.value = Math.min(10000, Math.max(500, Math.round(goal / 250) * 250))
+  }
+
+  hydrationNotice.value = `Daily water goal updated to ${hydrationGoalMl.value.toLocaleString('en-AU')} ml.`
+  persistHydration()
+}
 
 const loadCalorieGoal = async () => {
   try {
@@ -975,9 +1139,18 @@ watch(
   { deep: true },
 )
 
+watch(selectedNutritionDate, () => {
+  if (hydrationUsername.value) loadHydrationForDate()
+})
+
+watch([historySearch, historyDateFrom, historyDateTo], () => {
+  nutritionHistoryLimit.value = HISTORY_PAGE_SIZE
+})
+
 // Load saved nutrition records when the Nutrition page opens.
 onMounted(() => {
   initializeNutritionDraft()
+  initializeHydration()
   loadNutrition()
   loadCalorieGoal()
 })
@@ -1392,6 +1565,170 @@ const deleteNutrition = async (nutritionId) => {
   font-size: 0.84rem;
 }
 
+.hydration-card {
+  margin-bottom: 24px;
+  padding: 24px 26px;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #cfe2e2;
+  border-radius: 20px;
+  background: linear-gradient(120deg, #f8fffe, #e2f2f3);
+}
+
+.hydration-visual {
+  width: 86px;
+  height: 110px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #71aeb2;
+  border-radius: 18px 18px 28px 28px;
+  background: linear-gradient(to top, #91d5dc 0 52%, rgba(255, 255, 255, 0.75) 52%);
+  color: #174b51;
+  box-shadow: inset 0 0 0 5px rgba(255, 255, 255, 0.45);
+}
+
+.hydration-visual span {
+  font-size: 1.35rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+}
+
+.hydration-visual sub {
+  font-size: 0.65em;
+}
+
+.hydration-content {
+  min-width: 0;
+}
+
+.hydration-heading-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.hydration-heading-row h2 {
+  margin: 5px 0 5px;
+  font-size: 1.45rem;
+}
+
+.hydration-heading-row p:last-child {
+  margin: 0;
+  color: #526c6d;
+  font-size: 1rem;
+}
+
+.hydration-heading-row > strong {
+  color: #226d75;
+  font-size: 2rem;
+}
+
+.hydration-progress {
+  height: 12px;
+  margin-top: 17px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(34, 109, 117, 0.12);
+}
+
+.hydration-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #65abb2, #8ed9df);
+  transition: width 0.3s ease;
+}
+
+.hydration-controls {
+  margin-top: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+}
+
+.water-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.water-actions button {
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 1px solid #9ac8cb;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #205c62;
+  font: inherit;
+  font-size: 0.94rem;
+  font-weight: 780;
+  cursor: pointer;
+}
+
+.water-actions button:hover:not(:disabled) {
+  background: #dff3f4;
+}
+
+.water-actions .water-undo {
+  border-color: #d2dedd;
+  color: #617473;
+}
+
+.water-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.water-goal-control {
+  display: grid;
+  gap: 5px;
+  color: #526c6d;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.water-goal-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid #b8d4d5;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.water-goal-input input {
+  width: 92px;
+  min-height: 40px;
+  padding: 8px 4px 8px 11px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #173f43;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+
+.water-goal-input small {
+  padding-right: 11px;
+  color: #708486;
+  font-size: 0.78rem;
+  text-transform: none;
+}
+
+.hydration-note {
+  min-height: 1.3em;
+  margin: 11px 0 0;
+  color: #667c7d;
+  font-size: 0.83rem;
+}
+
 /* Content cards */
 .content-card {
   background: #fffefd;
@@ -1732,6 +2069,35 @@ const deleteNutrition = async (nutritionId) => {
 .history-filters button, .clear-filter-button { min-height: 44px; padding: 10px 15px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #315e51; font: inherit; font-weight: 750; cursor: pointer; }
 .history-filters button:hover, .clear-filter-button:hover { background: #eaf4c7; }
 
+.history-pagination {
+  margin-top: 4px;
+  padding-top: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #e0e7e3;
+  color: #68766f;
+  font-size: .9rem;
+  font-weight: 700;
+}
+
+.history-pagination button {
+  min-height: 42px;
+  padding: 9px 15px;
+  border: 1px solid #b9ccbf;
+  border-radius: 10px;
+  background: #fff;
+  color: #315e51;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.history-pagination button:hover {
+  background: #eef7d0;
+}
+
 .history-item {
   padding: 20px;
   background: #f7f8f9;
@@ -2067,6 +2433,34 @@ const deleteNutrition = async (nutritionId) => {
   .goal-progress,
   .goal-note {
     grid-column: 1;
+  }
+
+  .hydration-card {
+    grid-template-columns: 1fr;
+  }
+
+  .hydration-visual {
+    width: 58px;
+    height: 68px;
+    border-radius: 13px 13px 19px 19px;
+  }
+
+  .hydration-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .water-actions button {
+    flex: 1 1 120px;
+  }
+
+  .water-goal-control,
+  .water-goal-input {
+    width: 100%;
+  }
+
+  .water-goal-input input {
+    flex: 1;
   }
 
   .suggestion-heading,

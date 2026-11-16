@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { RouterLink, useRoute } from 'vue-router'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
@@ -17,6 +17,11 @@ import {
   loadActivityDraft,
   saveActivityDraft,
 } from '../services/activityDrafts'
+import {
+  getWorkoutTemplateKey,
+  loadWorkoutTemplates,
+  saveWorkoutTemplates,
+} from '../services/workoutTemplates'
 
 const route = useRoute()
 
@@ -79,12 +84,21 @@ const WORKOUT_TEMPLATES = [
   },
 ]
 
+const REST_TIMER_PRESETS = [60, 90, 120]
+const HISTORY_PAGE_SIZE = 6
+
 const toLocalDate = (date) => {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
+}
+
+const requestedWorkoutDate = () => {
+  const date = typeof route.query.date === 'string' ? route.query.date : ''
+  const currentDate = toLocalDate(new Date())
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= currentDate ? date : currentDate
 }
 
 const muscleGroup = ref('')
@@ -99,6 +113,11 @@ const weeklyPlan = ref(null)
 const formError = ref('')
 const saveNotice = ref('')
 const templateNotice = ref('')
+const customTemplates = ref([])
+const workoutTemplateKey = ref('')
+const showTemplateForm = ref(false)
+const customTemplateName = ref('')
+const customTemplateError = ref('')
 const isSaving = ref(false)
 const isLoadingHistory = ref(true)
 const historyError = ref('')
@@ -112,10 +131,16 @@ const historySearch = ref('')
 const historyDateFrom = ref('')
 const historyDateTo = ref('')
 const historyActionNotice = ref('')
+const workoutHistoryLimit = ref(HISTORY_PAGE_SIZE)
 const workoutDraftKey = ref('')
 const workoutDraftNotice = ref('')
+const restDuration = ref(90)
+const restSecondsRemaining = ref(90)
+const restTimerRunning = ref(false)
+const restTimerComplete = ref(false)
+let restTimerId = null
 const today = computed(() => toLocalDate(new Date()))
-const selectedWorkoutDate = ref(toLocalDate(new Date()))
+const selectedWorkoutDate = ref(requestedWorkoutDate())
 const isSelectedToday = computed(() => selectedWorkoutDate.value === today.value)
 const selectedDateLabel = computed(() => {
   const parsed = new Date(`${selectedWorkoutDate.value}T00:00:00`)
@@ -128,6 +153,59 @@ const selectedDateLabel = computed(() => {
     year: 'numeric',
   }).format(parsed)
 })
+const restTimerLabel = computed(() => {
+  const minutes = Math.floor(restSecondsRemaining.value / 60)
+  const seconds = String(restSecondsRemaining.value % 60).padStart(2, '0')
+  return `${minutes}:${seconds}`
+})
+const restTimerProgress = computed(() =>
+  Math.min(100, Math.max(0, ((restDuration.value - restSecondsRemaining.value) / restDuration.value) * 100)),
+)
+
+const stopRestTimer = () => {
+  if (restTimerId !== null) {
+    window.clearInterval(restTimerId)
+    restTimerId = null
+  }
+  restTimerRunning.value = false
+}
+
+const selectRestDuration = (seconds) => {
+  stopRestTimer()
+  restDuration.value = seconds
+  restSecondsRemaining.value = seconds
+  restTimerComplete.value = false
+}
+
+const toggleRestTimer = () => {
+  if (restTimerRunning.value) {
+    stopRestTimer()
+    return
+  }
+
+  if (restSecondsRemaining.value === 0) {
+    restSecondsRemaining.value = restDuration.value
+  }
+
+  restTimerComplete.value = false
+  restTimerRunning.value = true
+  restTimerId = window.setInterval(() => {
+    if (restSecondsRemaining.value <= 1) {
+      restSecondsRemaining.value = 0
+      restTimerComplete.value = true
+      stopRestTimer()
+      return
+    }
+
+    restSecondsRemaining.value -= 1
+  }, 1000)
+}
+
+const resetRestTimer = () => {
+  stopRestTimer()
+  restSecondsRemaining.value = restDuration.value
+  restTimerComplete.value = false
+}
 const linkedPlanDay = computed(() => {
   if (route.query.fromPlan !== '1' || !weeklyPlan.value?.days) return null
 
@@ -152,6 +230,49 @@ const sortedWorkouts = computed(() =>
   ),
 )
 
+const numericValue = (value) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const sessionTotalSets = computed(() =>
+  exercises.value.reduce((total, item) => total + numericValue(item.sets), 0),
+)
+
+const sessionTotalReps = computed(() =>
+  exercises.value.reduce(
+    (total, item) => total + numericValue(item.sets) * numericValue(item.reps),
+    0,
+  ),
+)
+
+const calculateWorkoutVolume = (workoutExercises = []) =>
+  workoutExercises.reduce(
+    (total, item) =>
+      total +
+      numericValue(item.sets) * numericValue(item.reps) * numericValue(item.weight),
+    0,
+  )
+
+const sessionVolume = computed(() => calculateWorkoutVolume(exercises.value))
+const latestSavedVolume = computed(() =>
+  calculateWorkoutVolume(sortedWorkouts.value[0]?.exercises ?? []),
+)
+const formattedSessionVolume = computed(() =>
+  new Intl.NumberFormat('en-AU', { maximumFractionDigits: 0 }).format(sessionVolume.value),
+)
+const sessionVolumeComparison = computed(() => {
+  if (!exercises.value.length) return 'Add exercises to calculate volume'
+  if (sessionVolume.value === 0) return 'Add working weight to calculate volume'
+  if (latestSavedVolume.value === 0) return 'Your first weighted session'
+
+  const difference = sessionVolume.value - latestSavedVolume.value
+  const percentage = Math.round((Math.abs(difference) / latestSavedVolume.value) * 100)
+
+  if (percentage === 0) return 'Matches your latest saved session'
+  return `${percentage}% ${difference > 0 ? 'above' : 'below'} your latest saved session`
+})
+
 const filteredWorkouts = computed(() => {
   const search = historySearch.value.trim().toLowerCase()
 
@@ -167,6 +288,10 @@ const filteredWorkouts = computed(() => {
     return matchesSearch && matchesStart && matchesEnd
   })
 })
+
+const displayedWorkouts = computed(() =>
+  filteredWorkouts.value.slice(0, workoutHistoryLimit.value),
+)
 
 const hasHistoryFilters = computed(() =>
   Boolean(historySearch.value || historyDateFrom.value || historyDateTo.value),
@@ -230,6 +355,72 @@ const applyWorkoutTemplate = (template) => {
 
   exercises.value.push(...additions)
   templateNotice.value = `${additions.length} exercises added from ${template.title}. Adjust the weight for your level before saving.`
+}
+
+const initializeWorkoutTemplates = async () => {
+  try {
+    workoutTemplateKey.value = await getWorkoutTemplateKey()
+    customTemplates.value = loadWorkoutTemplates(workoutTemplateKey.value)
+  } catch {
+    workoutTemplateKey.value = ''
+    customTemplates.value = []
+  }
+}
+
+const saveCurrentAsTemplate = () => {
+  customTemplateError.value = ''
+  const name = customTemplateName.value.trim()
+
+  if (!workoutTemplateKey.value) {
+    customTemplateError.value = 'Templates are not available yet. Refresh the page and try again.'
+    return
+  }
+
+  if (!name) {
+    customTemplateError.value = 'Enter a name for this workout template.'
+    return
+  }
+
+  if (!exercises.value.length) {
+    customTemplateError.value = 'Add at least one exercise before saving a template.'
+    return
+  }
+
+  const duplicateName = customTemplates.value.some(
+    (template) => template.title.toLowerCase() === name.toLowerCase(),
+  )
+
+  if (duplicateName) {
+    customTemplateError.value = 'A template with this name already exists.'
+    return
+  }
+
+  const template = {
+    id: `custom-${Date.now()}`,
+    title: name,
+    description: `${exercises.value.length} exercise${exercises.value.length === 1 ? '' : 's'} saved from your session.`,
+    exercises: exercises.value.map((item) => ({ ...item })),
+  }
+
+  customTemplates.value = saveWorkoutTemplates(workoutTemplateKey.value, [
+    template,
+    ...customTemplates.value,
+  ])
+  customTemplateName.value = ''
+  showTemplateForm.value = false
+  templateNotice.value = `${template.title} was saved to your templates on this device.`
+}
+
+const deleteCustomTemplate = (template) => {
+  const confirmed = window.confirm(`Delete the “${template.title}” workout template?`)
+
+  if (!confirmed) return
+
+  customTemplates.value = saveWorkoutTemplates(
+    workoutTemplateKey.value,
+    customTemplates.value.filter((item) => item.id !== template.id),
+  )
+  templateNotice.value = `${template.title} was deleted. Your saved workout history was not changed.`
 }
 
 const repeatWorkout = (workout) => {
@@ -607,8 +798,13 @@ watch(
   { deep: true },
 )
 
+watch([historySearch, historyDateFrom, historyDateTo], () => {
+  workoutHistoryLimit.value = HISTORY_PAGE_SIZE
+})
+
 onMounted(() => {
   initializeWorkoutDraft()
+  initializeWorkoutTemplates()
   loadWorkouts()
   loadWeeklyPlan().then((plan) => {
     weeklyPlan.value = plan
@@ -624,6 +820,8 @@ onMounted(() => {
     }
   })
 })
+
+onUnmounted(stopRestTimer)
 
 </script>
 
@@ -694,19 +892,28 @@ onMounted(() => {
         </article>
 
         <article class="summary-card yellow-card">
+          <p>Working Sets</p>
+          <div class="summary-value">
+            {{ sessionTotalSets }}
+          </div>
+          <span>{{ sessionTotalReps }} planned reps</span>
+        </article>
+
+        <article class="summary-card lime-card">
+          <p>Training Volume</p>
+          <div class="summary-value volume-value">
+            {{ formattedSessionVolume }}
+          </div>
+          <span>kg planned for this session</span>
+          <small class="volume-comparison">{{ sessionVolumeComparison }}</small>
+        </article>
+
+        <article class="summary-card pink-card">
           <p>Saved Workouts</p>
           <div class="summary-value">
             {{ workouts.length }}
           </div>
-          <span>Total sessions</span>
-        </article>
-
-        <article class="summary-card lime-card">
-          <p>{{ isSelectedToday ? "Today's Focus" : 'Session Date' }}</p>
-          <div class="summary-text">
-            {{ displayedPlanDay ? `Plan Day ${displayedPlanDay.dayNumber}` : isSelectedToday ? 'Keep moving' : selectedDateLabel }}
-          </div>
-          <span>{{ isPlanWorkout ? 'Plan-linked session' : isSelectedToday ? 'One session at a time' : 'Historical workout entry' }}</span>
+          <span>Total training sessions</span>
         </article>
       </section>
 
@@ -717,7 +924,62 @@ onMounted(() => {
             <h2 id="workout-templates-heading">Choose a workout template</h2>
             <span>Add a ready-made session, then adjust sets, reps, and weight as needed.</span>
           </div>
-          <div class="template-heading-icon"><AppIcon name="workout" :size="24" /></div>
+          <div class="template-heading-actions">
+            <button
+              v-if="exercises.length"
+              type="button"
+              class="save-template-trigger"
+              @click="showTemplateForm = !showTemplateForm; customTemplateError = ''"
+            >
+              {{ showTemplateForm ? 'Cancel' : 'Save current as template' }}
+            </button>
+            <div class="template-heading-icon"><AppIcon name="workout" :size="24" /></div>
+          </div>
+        </div>
+
+        <form v-if="showTemplateForm" class="save-template-form" @submit.prevent="saveCurrentAsTemplate">
+          <label>
+            <span>Template name</span>
+            <input
+              v-model="customTemplateName"
+              type="text"
+              maxlength="40"
+              placeholder="e.g. Monday strength"
+              autofocus
+            />
+          </label>
+          <button type="submit">Save template</button>
+          <p v-if="customTemplateError" role="alert">{{ customTemplateError }}</p>
+        </form>
+
+        <div v-if="customTemplates.length" class="custom-template-section">
+          <div class="template-subheading">
+            <strong>Your templates</strong>
+            <span>Saved on this device · {{ customTemplates.length }}/8</span>
+          </div>
+          <div class="template-grid">
+            <article v-for="template in customTemplates" :key="template.id" class="template-card custom-template-card">
+              <div>
+                <h3>{{ template.title }}</h3>
+                <p>{{ template.description }}</p>
+              </div>
+              <ul>
+                <li v-for="item in template.exercises" :key="`${template.id}-${item.exercise}`">
+                  <span>{{ item.exercise }}</span>
+                  <small>{{ item.sets }} × {{ item.reps }} · {{ item.weight }} kg</small>
+                </li>
+              </ul>
+              <div class="custom-template-actions">
+                <button type="button" @click="applyWorkoutTemplate(template)">Add to session</button>
+                <button type="button" class="delete-template-button" @click="deleteCustomTemplate(template)">Delete</button>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div v-if="customTemplates.length" class="template-subheading starter-subheading">
+          <strong>Starter templates</strong>
+          <span>Built-in sessions</span>
         </div>
 
         <div class="template-grid">
@@ -739,6 +1001,43 @@ onMounted(() => {
         <p v-if="templateNotice" class="template-notice" aria-live="polite">
           {{ templateNotice }}
         </p>
+      </section>
+
+      <section class="rest-timer-card" aria-labelledby="rest-timer-heading">
+        <div class="rest-timer-copy">
+          <p>BETWEEN SETS</p>
+          <h2 id="rest-timer-heading">Rest timer</h2>
+          <span>Stay consistent without leaving your workout page.</span>
+        </div>
+
+        <div class="rest-timer-display" :class="{ complete: restTimerComplete }" aria-live="polite">
+          <strong>{{ restTimerLabel }}</strong>
+          <span>{{ restTimerComplete ? 'Ready for your next set' : restTimerRunning ? 'Resting…' : 'Ready when you are' }}</span>
+          <div class="rest-progress" role="progressbar" :aria-valuenow="Math.round(restTimerProgress)" aria-valuemin="0" aria-valuemax="100">
+            <span :style="{ width: `${restTimerProgress}%` }"></span>
+          </div>
+        </div>
+
+        <div class="rest-timer-controls">
+          <div class="rest-presets" aria-label="Rest timer duration">
+            <button
+              v-for="seconds in REST_TIMER_PRESETS"
+              :key="seconds"
+              type="button"
+              :class="{ active: restDuration === seconds }"
+              :aria-pressed="restDuration === seconds"
+              @click="selectRestDuration(seconds)"
+            >
+              {{ seconds }}s
+            </button>
+          </div>
+          <div class="rest-actions">
+            <button type="button" class="rest-primary" @click="toggleRestTimer">
+              {{ restTimerRunning ? 'Pause' : restSecondsRemaining === 0 ? 'Start again' : 'Start' }}
+            </button>
+            <button type="button" @click="resetRestTimer">Reset</button>
+          </div>
+        </div>
       </section>
 
       <!-- Add Exercise -->
@@ -1038,7 +1337,7 @@ onMounted(() => {
           </div>
 
           <div
-            v-for="workout in filteredWorkouts"
+            v-for="workout in displayedWorkouts"
             :key="workout.workoutId"
             class="history-item"
           >
@@ -1117,6 +1416,20 @@ onMounted(() => {
                 {{ deletingWorkoutId === workout.workoutId ? 'Deleting…' : 'Yes, delete' }}
               </button>
             </div>
+          </div>
+
+          <div v-if="filteredWorkouts.length > HISTORY_PAGE_SIZE" class="history-pagination">
+            <span>Showing {{ displayedWorkouts.length }} of {{ filteredWorkouts.length }}</span>
+            <button
+              v-if="displayedWorkouts.length < filteredWorkouts.length"
+              type="button"
+              @click="workoutHistoryLimit += HISTORY_PAGE_SIZE"
+            >
+              Load more
+            </button>
+            <button v-else type="button" @click="workoutHistoryLimit = HISTORY_PAGE_SIZE">
+              Show less
+            </button>
           </div>
         </article>
       </section>
@@ -1344,7 +1657,7 @@ onMounted(() => {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   margin-bottom: 24px;
 }
@@ -1373,6 +1686,19 @@ onMounted(() => {
   font-weight: 800;
 }
 
+.volume-value {
+  font-size: 2.55rem;
+}
+
+.summary-card .volume-comparison {
+  display: block;
+  margin-top: 12px;
+  color: #486244;
+  font-size: .78rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .summary-text {
   font-size: 1.75rem;
   font-weight: 800;
@@ -1388,6 +1714,10 @@ onMounted(() => {
 
 .lime-card {
   background: #e2f58b;
+}
+
+.pink-card {
+  background: #f6dfe7;
 }
 
 /* Workout templates */
@@ -1436,6 +1766,112 @@ onMounted(() => {
   border-radius: 14px;
   background: #e2f58b;
   color: #17352c;
+}
+
+.template-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.save-template-trigger {
+  min-height: 44px;
+  padding: 9px 14px;
+  border: 1px solid #aac45a;
+  border-radius: 11px;
+  background: #fffefd;
+  color: #315e51;
+  font: inherit;
+  font-size: .9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.save-template-trigger:hover {
+  background: #eef7cd;
+}
+
+.save-template-form {
+  margin-bottom: 18px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  border: 1px solid #cfddd4;
+  border-radius: 14px;
+  background: #fffefd;
+}
+
+.save-template-form label {
+  display: grid;
+  gap: 7px;
+  color: #52615d;
+  font-size: .86rem;
+  font-weight: 800;
+}
+
+.save-template-form input {
+  min-height: 46px;
+  padding: 11px 13px;
+  border: 1px solid #d4ddd7;
+  border-radius: 10px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+}
+
+.save-template-form input:focus {
+  border-color: #8eac40;
+  outline: 3px solid rgba(203, 237, 99, .3);
+}
+
+.save-template-form > button {
+  min-height: 46px;
+  padding: 10px 18px;
+  border: 1px solid #bad552;
+  border-radius: 10px;
+  background: #e2f58b;
+  color: #17352c;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.save-template-form p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #a43a30;
+  font-size: .9rem;
+  font-weight: 700;
+}
+
+.custom-template-section {
+  margin-bottom: 22px;
+}
+
+.template-subheading {
+  margin: 0 0 11px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.template-subheading strong {
+  color: #24483d;
+  font-size: 1rem;
+}
+
+.template-subheading span {
+  color: #718079;
+  font-size: .8rem;
+  font-weight: 700;
+}
+
+.starter-subheading {
+  padding-top: 18px;
+  border-top: 1px solid #dce5df;
 }
 
 .template-grid {
@@ -1515,6 +1951,34 @@ onMounted(() => {
   outline-offset: 2px;
 }
 
+.custom-template-card {
+  border-color: #bcd3c3;
+  box-shadow: inset 0 3px 0 #b9da67;
+}
+
+.custom-template-actions {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.custom-template-actions button {
+  margin-top: 0;
+}
+
+.custom-template-actions .delete-template-button {
+  width: auto;
+  padding: 0 13px;
+  border-color: #e3c2bd;
+  background: #fff;
+  color: #a43a30;
+}
+
+.custom-template-actions .delete-template-button:hover {
+  background: #fff2ef;
+}
+
 .template-notice {
   margin: 16px 0 0;
   padding: 12px 14px;
@@ -1524,6 +1988,38 @@ onMounted(() => {
   font-size: .94rem;
   font-weight: 700;
 }
+
+/* Rest timer */
+
+.rest-timer-card {
+  margin-bottom: 24px;
+  padding: 24px 26px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(210px, .7fr) auto;
+  align-items: center;
+  gap: 28px;
+  border: 1px solid #cfddd4;
+  border-radius: 20px;
+  background: #173f34;
+  color: #fff;
+}
+
+.rest-timer-copy p { margin: 0 0 5px; color: #cbed63; font-size: .78rem; font-weight: 850; letter-spacing: .1em; }
+.rest-timer-copy h2 { margin: 0 0 7px; font-size: 1.45rem; }
+.rest-timer-copy span { color: #c9d8d2; font-size: .95rem; line-height: 1.45; }
+.rest-timer-display { min-width: 0; padding: 15px 18px; border-radius: 15px; background: rgba(255, 255, 255, .09); }
+.rest-timer-display.complete { background: rgba(203, 237, 99, .18); }
+.rest-timer-display strong { display: block; font-variant-numeric: tabular-nums; font-size: 2.45rem; line-height: 1; }
+.rest-timer-display > span { display: block; margin-top: 7px; color: #d5e1dc; font-size: .8rem; font-weight: 700; }
+.rest-progress { height: 6px; margin-top: 13px; overflow: hidden; border-radius: 999px; background: rgba(255, 255, 255, .16); }
+.rest-progress span { display: block; height: 100%; border-radius: inherit; background: #cbed63; transition: width .25s linear; }
+.rest-timer-controls { display: grid; gap: 10px; }
+.rest-presets, .rest-actions { display: flex; gap: 7px; }
+.rest-timer-controls button { min-height: 40px; padding: 8px 12px; border: 1px solid rgba(255, 255, 255, .22); border-radius: 10px; background: rgba(255, 255, 255, .08); color: #fff; font: inherit; font-size: .85rem; font-weight: 800; cursor: pointer; }
+.rest-timer-controls button:hover { border-color: #cbed63; }
+.rest-timer-controls button:focus-visible { outline: 3px solid rgba(203, 237, 99, .42); outline-offset: 2px; }
+.rest-presets button.active { border-color: #cbed63; background: #cbed63; color: #17352c; }
+.rest-actions .rest-primary { min-width: 92px; border-color: #cbed63; background: #cbed63; color: #17352c; }
 
 /* Main cards */
 
@@ -1790,6 +2286,35 @@ onMounted(() => {
 .history-filters input:focus { outline: 3px solid rgba(203, 237, 99, .32); border-color: #7da23a; }
 .history-filters button, .clear-filter-button { min-height: 44px; padding: 10px 15px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #315e51; font: inherit; font-weight: 750; cursor: pointer; }
 .history-filters button:hover, .clear-filter-button:hover { background: #eaf4c7; }
+
+.history-pagination {
+  margin-top: 16px;
+  padding-top: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #e0e7e3;
+  color: #68766f;
+  font-size: .9rem;
+  font-weight: 700;
+}
+
+.history-pagination button {
+  min-height: 42px;
+  padding: 9px 15px;
+  border: 1px solid #b9ccbf;
+  border-radius: 10px;
+  background: #fff;
+  color: #315e51;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.history-pagination button:hover {
+  background: #eef7d0;
+}
 .history-action-notice { margin: 0 0 14px; padding: 11px 13px; border-radius: 10px; background: #edf7d0; color: #315e51; font-size: .9rem; font-weight: 700; line-height: 1.45; }
 .draft-notice { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #dce6df; border-radius: 10px; background: #f5f8f6; color: #5d6f68; font-size: .88rem; line-height: 1.45; }
 
@@ -2013,6 +2538,12 @@ onMounted(() => {
 
 /* Responsive */
 
+@media (max-width: 1250px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 1000px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -2032,6 +2563,14 @@ onMounted(() => {
 
   .template-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rest-timer-card {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .rest-timer-copy {
+    grid-column: 1 / -1;
   }
 
   .history-filters { grid-template-columns: 1fr 1fr; }
@@ -2068,6 +2607,31 @@ onMounted(() => {
 
   .template-heading-icon {
     display: none;
+  }
+
+  .template-heading,
+  .template-heading-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .save-template-form {
+    grid-template-columns: 1fr;
+  }
+
+  .rest-timer-card {
+    padding: 20px;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .rest-timer-copy {
+    grid-column: auto;
+  }
+
+  .rest-presets button,
+  .rest-actions button {
+    flex: 1;
   }
 
   .suggestion-heading {

@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { fetchAuthSession, signOut } from 'aws-amplify/auth'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { fetchAuthSession, getCurrentUser, signOut } from 'aws-amplify/auth'
 import { RouterLink, useRouter } from 'vue-router'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import { loadBodyProgress } from '../services/bodyMetrics'
+import { loadHydrationHistory } from '../services/hydration'
 
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 
@@ -13,6 +14,7 @@ const router = useRouter()
 const workouts = ref([])
 const nutrition = ref([])
 const bodyMetrics = ref([])
+const hydrationHistory = ref([])
 const targetWeightKg = ref(null)
 const isLoading = ref(true)
 const loadError = ref('')
@@ -69,12 +71,21 @@ const nutritionInRange = computed(() =>
   nutrition.value.filter((record) => !rangeStartDate.value || record.date >= rangeStartDate.value),
 )
 
-const bodyMetricsInRange = computed(() =>
+const bodyRecordsInRange = computed(() =>
   bodyMetrics.value.filter(
-    (record) =>
-      Number.isFinite(Number(record.weightKg)) &&
-      (!rangeStartDate.value || record.date >= rangeStartDate.value),
+    (record) => !rangeStartDate.value || record.date >= rangeStartDate.value,
   ),
+)
+
+const hydrationInRange = computed(() =>
+  hydrationHistory.value.filter(
+    (record) =>
+      record.intakeMl > 0 && (!rangeStartDate.value || record.date >= rangeStartDate.value),
+  ),
+)
+
+const bodyMetricsInRange = computed(() =>
+  bodyRecordsInRange.value.filter((record) => Number.isFinite(Number(record.weightKg))),
 )
 
 const bodyWeightTrend = computed(() =>
@@ -107,6 +118,47 @@ const bodyBarHeight = (weight) => {
     (bodyTrendMaximum.value - bodyTrendMinimum.value)
   return `${Math.round(28 + ratio * 72)}%`
 }
+
+const activityCalendarDays = computed(() => {
+  const today = new Date(`${toLocalDate(new Date())}T00:00:00`)
+
+  return Array.from({ length: 28 }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (27 - index))
+    const dateKey = toLocalDate(date)
+    const workoutCount = workouts.value.filter((item) => item.date === dateKey).length
+    const nutritionCount = nutrition.value.filter((item) => item.date === dateKey).length
+    const measurementCount = bodyMetrics.value.filter((item) => item.date === dateKey).length
+    const hydrationRecord = hydrationHistory.value.find((item) => item.date === dateKey)
+    const hydrationMl = hydrationRecord?.intakeMl ?? 0
+    const score =
+      Number(workoutCount > 0) +
+      Number(nutritionCount > 0) +
+      Number(measurementCount > 0) +
+      Number(hydrationMl > 0)
+
+    return {
+      date: dateKey,
+      day: date.getDate(),
+      weekday: new Intl.DateTimeFormat('en-AU', { weekday: 'short' }).format(date),
+      workoutCount,
+      nutritionCount,
+      measurementCount,
+      hydrationMl,
+      score,
+    }
+  })
+})
+
+const activeCalendarDays = computed(
+  () => activityCalendarDays.value.filter((day) => day.score > 0).length,
+)
+const completeCalendarDays = computed(
+  () => activityCalendarDays.value.filter((day) => day.score === 4).length,
+)
+const calendarConsistency = computed(() =>
+  Math.round((activeCalendarDays.value / activityCalendarDays.value.length) * 100),
+)
 
 const previousRange = computed(() => {
   if (selectedRange.value === 'all') return null
@@ -412,6 +464,22 @@ const averageCalories = computed(() => {
   return calculateAverageCalories(nutritionInRange.value)
 })
 
+const averageHydration = computed(() => {
+  if (!hydrationInRange.value.length) return 0
+
+  return Math.round(
+    hydrationInRange.value.reduce((total, record) => total + record.intakeMl, 0) /
+      hydrationInRange.value.length,
+  )
+})
+
+const hydrationGoalDays = computed(
+  () =>
+    hydrationInRange.value.filter(
+      (record) => record.intakeMl > 0 && record.intakeMl >= record.goalMl,
+    ).length,
+)
+
 const displayedWorkouts = computed(() => {
   return showAllWorkouts.value
     ? sortedWorkouts.value
@@ -432,9 +500,19 @@ const toLocalDate = (date) => {
   return `${year}-${month}-${day}`
 }
 
+const selectedCalendarDate = ref(toLocalDate(new Date()))
+const selectedCalendarDay = computed(() =>
+  activityCalendarDays.value.find((day) => day.date === selectedCalendarDate.value),
+)
+
 const trendBuckets = computed(() => {
   const today = new Date(`${toLocalDate(new Date())}T00:00:00`)
-  const recordedDates = [...workouts.value, ...nutrition.value, ...bodyMetrics.value]
+  const recordedDates = [
+    ...workouts.value,
+    ...nutrition.value,
+    ...bodyMetrics.value,
+    ...hydrationHistory.value,
+  ]
     .map((record) => new Date(`${record.date}T00:00:00`))
     .filter((date) => !Number.isNaN(date.getTime()) && date <= today)
     .sort((a, b) => a - b)
@@ -494,12 +572,33 @@ const calorieTrend = computed(() =>
   })),
 )
 
+const hydrationTrend = computed(() =>
+  trendBuckets.value.map((bucket) => {
+    const records = hydrationInRange.value.filter(
+      (record) => record.date >= bucket.start && record.date <= bucket.end,
+    )
+
+    return {
+      ...bucket,
+      value: records.length
+        ? Math.round(
+            records.reduce((total, record) => total + record.intakeMl, 0) / records.length,
+          )
+        : 0,
+    }
+  }),
+)
+
 const trainingTrendMaximum = computed(() =>
   Math.max(1, ...trainingTrend.value.map((day) => day.value)),
 )
 
 const calorieTrendMaximum = computed(() =>
   Math.max(1, ...calorieTrend.value.map((day) => day.value)),
+)
+
+const hydrationTrendMaximum = computed(() =>
+  Math.max(1, ...hydrationTrend.value.map((day) => day.value)),
 )
 
 const barHeight = (value, maximum) =>
@@ -577,6 +676,109 @@ const exportNutrition = () => {
   )
 }
 
+const hasReportData = computed(
+  () =>
+    workoutsInRange.value.length > 0 ||
+    nutritionInRange.value.length > 0 ||
+    bodyRecordsInRange.value.length > 0 ||
+    hydrationInRange.value.length > 0,
+)
+
+const exportFullReport = () => {
+  const dates = [
+    ...workoutsInRange.value.map((item) => item.date),
+    ...nutritionInRange.value.map((item) => item.date),
+    ...bodyRecordsInRange.value.map((item) => item.date),
+    ...hydrationInRange.value.map((item) => item.date),
+  ]
+  const rows = [...new Set(dates.filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b)))
+    .map((date) => {
+      const dayWorkouts = workoutsInRange.value.filter((item) => item.date === date)
+      const dayNutrition = nutritionInRange.value.filter((item) => item.date === date)
+      const dayBodyRecords = bodyRecordsInRange.value.filter((item) => item.date === date)
+      const dayExercises = dayWorkouts.reduce(
+        (total, workout) => total + (workout.exercises?.length ?? 0),
+        0,
+      )
+      const dayVolume = calculateTrainingVolume(dayWorkouts)
+      const dayNutritionTotals = dayNutrition.reduce(
+        (totals, record) => {
+          const recordTotals = nutritionTotals(record)
+          return {
+            calories: totals.calories + recordTotals.calories,
+            protein: totals.protein + recordTotals.protein,
+            carbs: totals.carbs + recordTotals.carbs,
+            fat: totals.fat + recordTotals.fat,
+          }
+        },
+        { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      )
+      const latestBodyRecord = [...dayBodyRecords]
+        .sort((a, b) =>
+          String(a.updatedAt || a.createdAt || '').localeCompare(
+            String(b.updatedAt || b.createdAt || ''),
+          ),
+        )
+        .at(-1) ?? {}
+      const dayHydration = hydrationInRange.value.find((item) => item.date === date)
+
+      return [
+        date,
+        dayWorkouts.length,
+        dayExercises,
+        dayVolume,
+        dayNutritionTotals.calories,
+        dayNutritionTotals.protein,
+        dayNutritionTotals.carbs,
+        dayNutritionTotals.fat,
+        latestBodyRecord.weightKg,
+        latestBodyRecord.bodyFatPercent,
+        latestBodyRecord.waistCm,
+        latestBodyRecord.note,
+        dayHydration?.intakeMl,
+        dayHydration?.goalMl,
+      ]
+    })
+
+  downloadCsv(
+    `repvelta-progress-report-${new Date().toISOString().slice(0, 10)}.csv`,
+    [
+      'Date',
+      'Workouts',
+      'Exercises',
+      'Training volume (kg)',
+      'Calories (kcal)',
+      'Protein (g)',
+      'Carbs (g)',
+      'Fat (g)',
+      'Weight (kg)',
+      'Body fat (%)',
+      'Waist (cm)',
+      'Body note',
+      'Water intake (ml)',
+      'Water goal (ml)',
+    ],
+    rows,
+  )
+}
+
+const printProgressReport = async () => {
+  const previousWorkoutState = showAllWorkouts.value
+  const previousNutritionState = showAllNutrition.value
+  showAllWorkouts.value = true
+  showAllNutrition.value = true
+  await nextTick()
+
+  const restorePreviewState = () => {
+    showAllWorkouts.value = previousWorkoutState
+    showAllNutrition.value = previousNutritionState
+  }
+
+  window.addEventListener('afterprint', restorePreviewState, { once: true })
+  window.print()
+}
+
 const loadProgress = async () => {
   isLoading.value = true
   loadError.value = ''
@@ -584,6 +786,7 @@ const loadProgress = async () => {
   workouts.value = []
   nutrition.value = []
   bodyMetrics.value = []
+  hydrationHistory.value = []
   targetWeightKg.value = null
 
   try {
@@ -593,6 +796,9 @@ const loadProgress = async () => {
     if (!idToken) {
       throw new Error('Your session has expired. Please sign in again.')
     }
+
+    const currentUser = await getCurrentUser()
+    hydrationHistory.value = loadHydrationHistory(currentUser.username)
 
     const [workoutRequest, nutritionRequest, bodyRequest] = await Promise.allSettled([
       fetch(`${API_URL}/workouts`, {
@@ -679,10 +885,12 @@ onMounted(loadProgress)
         <div>
           <p class="eyebrow">YOUR JOURNEY</p>
           <h1>Progress</h1>
-          <p>See how your training and nutrition are building over time.</p>
+          <p>See how your training, nutrition, hydration, and body data are building over time.</p>
         </div>
         <div class="topbar-actions">
           <div class="export-actions" aria-label="Export progress data">
+            <button type="button" class="full-report-button" :disabled="!hasReportData" @click="exportFullReport">Export full report</button>
+            <button type="button" :disabled="!hasReportData" @click="printProgressReport">Print / Save PDF</button>
             <button type="button" :disabled="workoutsInRange.length === 0" @click="exportWorkouts">Export workouts</button>
             <button type="button" :disabled="nutritionInRange.length === 0" @click="exportNutrition">Export nutrition</button>
           </div>
@@ -798,6 +1006,62 @@ onMounted(loadProgress)
               </div>
             </div>
           </article>
+
+          <article class="trend-card hydration-trend-card">
+            <div class="trend-heading hydration-trend-heading">
+              <div>
+                <p class="eyebrow">{{ rangeLabel.toUpperCase() }}</p>
+                <h2>Hydration consistency</h2>
+                <p>Average recorded water intake for each part of the selected period.</p>
+              </div>
+              <RouterLink to="/nutrition">Track water →</RouterLink>
+            </div>
+
+            <div v-if="hydrationInRange.length" class="hydration-trend-layout">
+              <div class="hydration-stats">
+                <article>
+                  <span>Daily average</span>
+                  <strong>{{ averageHydration.toLocaleString('en-AU') }} ml</strong>
+                </article>
+                <article>
+                  <span>Days recorded</span>
+                  <strong>{{ hydrationInRange.length }}</strong>
+                </article>
+                <article>
+                  <span>Goal reached</span>
+                  <strong>{{ hydrationGoalDays }} days</strong>
+                </article>
+              </div>
+
+              <div
+                class="bar-chart hydration-chart"
+                :style="{ '--bar-count': hydrationTrend.length }"
+                role="img"
+                :aria-label="`Average water intake during the selected ${rangeLabel.toLowerCase()} period`"
+              >
+                <div
+                  v-for="day in hydrationTrend"
+                  :key="day.start"
+                  class="bar-column"
+                  :title="`${formatDate(day.start)} to ${formatDate(day.end)}: ${day.value.toLocaleString('en-AU')} ml average`"
+                >
+                  <strong>{{ day.value.toLocaleString('en-AU') }}</strong>
+                  <div class="bar-track">
+                    <span
+                      class="hydration-bar"
+                      :style="{ height: barHeight(day.value, hydrationTrendMaximum) }"
+                    ></span>
+                  </div>
+                  <small>{{ day.label }}</small>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="balance-empty hydration-empty">
+              No water intake was recorded during this period.
+              <RouterLink to="/nutrition">Start tracking water</RouterLink>
+            </div>
+          </article>
         </section>
 
         <section class="body-overview-card" aria-labelledby="body-progress-heading">
@@ -850,6 +1114,68 @@ onMounted(loadProgress)
 
           <div v-else class="balance-empty body-empty">
             No weight entries were recorded during this period. <RouterLink to="/body">Add a measurement</RouterLink>
+          </div>
+        </section>
+
+        <section class="consistency-card" aria-labelledby="consistency-heading">
+          <div class="consistency-heading">
+            <div>
+              <p class="eyebrow">LAST 28 DAYS</p>
+              <h2 id="consistency-heading">Activity consistency</h2>
+              <p>Each square becomes stronger when you save training, nutrition, hydration, or body data that day.</p>
+            </div>
+            <div class="consistency-summary">
+              <div><strong>{{ activeCalendarDays }}</strong><span>active days</span></div>
+              <div><strong>{{ calendarConsistency }}%</strong><span>consistency</span></div>
+              <div><strong>{{ completeCalendarDays }}</strong><span>complete days</span></div>
+            </div>
+          </div>
+
+          <div class="calendar-weekdays" aria-hidden="true">
+            <span v-for="day in activityCalendarDays.slice(0, 7)" :key="day.date">{{ day.weekday }}</span>
+          </div>
+          <div class="activity-calendar" role="img" :aria-label="`${activeCalendarDays} active days during the last 28 days`">
+            <button
+              v-for="day in activityCalendarDays"
+              :key="day.date"
+              type="button"
+              class="activity-day"
+              :class="[`activity-level-${day.score}`, { selected: selectedCalendarDate === day.date }]"
+              :title="`${formatDate(day.date)}: ${day.workoutCount} workout, ${day.nutritionCount} nutrition record, ${day.hydrationMl} ml water, ${day.measurementCount} body measurement`"
+              :aria-label="`View activity for ${formatDate(day.date)}`"
+              :aria-pressed="selectedCalendarDate === day.date"
+              @click="selectedCalendarDate = day.date"
+            >
+              <span>{{ day.day }}</span>
+              <small>{{ day.score }}/4</small>
+            </button>
+          </div>
+          <div v-if="selectedCalendarDay" class="activity-day-detail" aria-live="polite">
+            <div>
+              <span>SELECTED DAY</span>
+              <strong>{{ formatDate(selectedCalendarDay.date) }}</strong>
+            </div>
+            <RouterLink :to="{ path: '/workout', query: { date: selectedCalendarDay.date } }">
+              <strong>{{ selectedCalendarDay.workoutCount }}</strong>
+              <span>{{ selectedCalendarDay.workoutCount === 1 ? 'workout' : 'workouts' }}</span>
+            </RouterLink>
+            <RouterLink :to="{ path: '/nutrition', query: { date: selectedCalendarDay.date } }">
+              <strong>{{ selectedCalendarDay.nutritionCount }}</strong>
+              <span>nutrition {{ selectedCalendarDay.nutritionCount === 1 ? 'record' : 'records' }}</span>
+            </RouterLink>
+            <RouterLink :to="{ path: '/body', query: { date: selectedCalendarDay.date } }">
+              <strong>{{ selectedCalendarDay.measurementCount }}</strong>
+              <span>body {{ selectedCalendarDay.measurementCount === 1 ? 'entry' : 'entries' }}</span>
+            </RouterLink>
+            <RouterLink :to="{ path: '/nutrition', query: { date: selectedCalendarDay.date } }">
+              <strong>{{ selectedCalendarDay.hydrationMl }}</strong>
+              <span>ml water</span>
+            </RouterLink>
+          </div>
+          <div class="activity-legend" aria-hidden="true">
+            <span>Less</span>
+            <i class="activity-level-0"></i><i class="activity-level-1"></i><i class="activity-level-2"></i><i class="activity-level-3"></i><i class="activity-level-4"></i>
+            <span>More</span>
           </div>
         </section>
 
@@ -1079,10 +1405,12 @@ onMounted(loadProgress)
 .topbar > div > p:last-child { margin: 0; color: #596574; font-size: 1.12rem; line-height: 1.55; }
 .eyebrow { margin: 0; color: #65717f; font-size: .95rem; font-weight: 800; letter-spacing: .1em; }
 .topbar-actions { display: flex; align-items: center; gap: 12px; }
-.export-actions { display: flex; gap: 8px; }
+.export-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .export-actions button { min-height: 44px; padding: 10px 13px; border: 1px solid #cdd9d1; border-radius: 11px; background: #fffefd; color: #315e51; font: inherit; font-size: .9rem; font-weight: 780; cursor: pointer; }
 .export-actions button:hover:not(:disabled) { border-color: #9ebc49; background: #f2f7df; }
 .export-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.export-actions .full-report-button { border-color: #244c40; background: #244c40; color: #fff; }
+.export-actions .full-report-button:hover:not(:disabled) { border-color: #315e51; background: #315e51; }
 .period-toolbar { margin-bottom: 24px; padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid #dfe7e2; border-radius: 16px; background: #fffefd; }
 .period-toolbar > div:first-child p { margin: 0 0 4px; }
 .period-toolbar > div:first-child strong { color: #17352c; font-size: 1.12rem; }
@@ -1117,6 +1445,19 @@ onMounted(loadProgress)
 .bar-track span { position: absolute; right: 0; bottom: 0; left: 0; display: block; border-radius: 10px 10px 6px 6px; transition: height .35s ease; }
 .training-bar { background: linear-gradient(180deg, #cbed63, #88ad3b); }
 .calorie-bar { background: linear-gradient(180deg, #ffd967, #e6a835); }
+.hydration-trend-card { grid-column: 1 / -1; background: linear-gradient(135deg, #fffefd, #e9f6f6); }
+.hydration-trend-heading h2 { margin-bottom: 5px; }
+.hydration-trend-heading div > p:last-child { margin: 0; color: #647878; font-size: .94rem; line-height: 1.5; }
+.hydration-trend-heading > a { color: #28656b; font-size: .94rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.hydration-trend-heading > a:hover { text-decoration: underline; }
+.hydration-trend-layout { display: grid; grid-template-columns: minmax(210px, .42fr) minmax(0, 1.58fr); gap: 28px; align-items: stretch; }
+.hydration-stats { display: grid; gap: 10px; }
+.hydration-stats article { padding: 15px 17px; border: 1px solid #d2e7e7; border-radius: 13px; background: rgba(255, 255, 255, .78); }
+.hydration-stats span { display: block; margin-bottom: 5px; color: #687b7b; font-size: .84rem; font-weight: 750; }
+.hydration-stats strong { color: #205c62; font-size: 1.16rem; }
+.hydration-chart { min-height: 230px; }
+.hydration-bar { background: linear-gradient(180deg, #8ed9df, #4f9fa7); }
+.hydration-empty a { color: #28656b; font-weight: 800; }
 .body-overview-card { margin-bottom: 24px; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: linear-gradient(135deg, #fffefd, #f9edf1); }
 .body-overview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .body-overview-heading h2 { margin: 6px 0 5px; font-size: 1.48rem; }
@@ -1135,6 +1476,34 @@ onMounted(loadProgress)
 .body-mini-column > div { position: relative; overflow: hidden; border-radius: 9px; background: rgba(97, 120, 111, .09); }
 .body-mini-column > div span { position: absolute; right: 0; bottom: 0; left: 0; border-radius: 9px 9px 4px 4px; background: linear-gradient(180deg, #f1b9c9, #b85e7b); }
 .body-empty a { color: #315e51; font-weight: 800; }
+.consistency-card { margin-bottom: 24px; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
+.consistency-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; margin-bottom: 24px; }
+.consistency-heading h2 { margin: 6px 0 5px; font-size: 1.48rem; }
+.consistency-heading div:first-child > p:last-child { max-width: 660px; margin: 0; color: #64716d; font-size: .98rem; line-height: 1.5; }
+.consistency-summary { display: grid; grid-template-columns: repeat(3, auto); gap: 10px; }
+.consistency-summary div { min-width: 105px; padding: 12px 14px; border-radius: 13px; background: #f2f6f3; text-align: center; }
+.consistency-summary strong { display: block; color: #244c40; font-size: 1.25rem; }
+.consistency-summary span { display: block; margin-top: 3px; color: #68746f; font-size: .76rem; font-weight: 750; white-space: nowrap; }
+.calendar-weekdays, .activity-calendar { display: grid; grid-template-columns: repeat(7, minmax(52px, 1fr)); gap: 8px; }
+.calendar-weekdays { margin-bottom: 7px; color: #7a8581; font-size: .76rem; font-weight: 800; text-align: center; }
+.activity-calendar { overflow-x: auto; }
+.activity-day { min-width: 52px; min-height: 62px; padding: 9px; display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; border: 1px solid rgba(51, 77, 68, .08); border-radius: 11px; color: #53625d; font: inherit; text-align: left; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease; }
+.activity-day:hover { transform: translateY(-2px); box-shadow: 0 5px 13px rgba(36, 76, 64, .12); }
+.activity-day:focus-visible { outline: 3px solid rgba(73, 109, 60, .35); outline-offset: 2px; }
+.activity-day.selected { border-color: #244c40; box-shadow: 0 0 0 2px rgba(36, 76, 64, .18); }
+.activity-day > span { font-size: .87rem; font-weight: 800; }
+.activity-day > small { font-size: .67rem; font-weight: 800; opacity: .78; }
+.activity-level-0 { background: #edf1ee; }.activity-level-1 { background: #e5f3bb; }.activity-level-2 { background: #c8e17d; color: #294236; }.activity-level-3 { background: #79a85e; color: #fff; }.activity-level-4 { background: #315e51; color: #fff; }
+.activity-day-detail { margin-top: 15px; padding: 14px; display: grid; grid-template-columns: minmax(180px, 1.3fr) repeat(4, minmax(105px, 1fr)); gap: 9px; border-radius: 14px; background: #f2f6f3; }
+.activity-day-detail > div, .activity-day-detail > a { min-width: 0; padding: 10px 12px; border-radius: 10px; background: #fff; color: #344b43; text-decoration: none; }
+.activity-day-detail > div span { display: block; margin-bottom: 4px; color: #738079; font-size: .68rem; font-weight: 850; letter-spacing: .08em; }
+.activity-day-detail > div strong { font-size: .94rem; }
+.activity-day-detail > a { display: flex; align-items: baseline; gap: 6px; border: 1px solid transparent; }
+.activity-day-detail > a:hover { border-color: #b9cb81; background: #f8fbe9; }
+.activity-day-detail > a strong { color: #244c40; font-size: 1.25rem; }
+.activity-day-detail > a span { color: #65716c; font-size: .78rem; font-weight: 700; }
+.activity-legend { margin-top: 13px; display: flex; align-items: center; justify-content: flex-end; gap: 5px; color: #74807b; font-size: .72rem; font-weight: 700; }
+.activity-legend i { width: 15px; height: 15px; display: block; border-radius: 4px; border: 1px solid rgba(51, 77, 68, .08); }
 .balance-card { margin-bottom: 24px; padding: 27px; border: 1px solid #e0e7e3; border-radius: 20px; background: #fffefd; }
 .balance-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .balance-heading h2 { margin: 6px 0 5px; font-size: 1.48rem; }
@@ -1221,6 +1590,22 @@ onMounted(loadProgress)
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 1200px) { .topbar { align-items: flex-start; }.topbar-actions { flex-direction: column-reverse; align-items: flex-end; }.summary-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { flex-direction: column; }.topbar-actions { width: 100%; align-items: stretch; }.export-actions button { flex: 1; }.period-toolbar { align-items: flex-start; flex-direction: column; }.trend-grid, .achievement-grid, .history-grid, .body-overview-grid { grid-template-columns: 1fr; } }
-@media (max-width: 700px) { .balance-grid { grid-template-columns: 1fr; }.balance-heading, .progression-heading, .body-overview-heading { flex-direction: column; }.balance-heading > span { white-space: normal; }.exercise-picker { width: 100%; min-width: 0; } }
-@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid, .progression-summary { grid-template-columns: 1fr; } .export-actions { width: 100%; }.period-toolbar > div:last-child { width: 100%; }.period-toolbar button { flex: 1; }.bar-chart { overflow-x: auto; }.date-badge { width: 80px; flex-basis: 80px; }.achievement-heading { flex-direction: column; }.best-item { grid-template-columns: 34px minmax(0, 1fr); }.best-weight { grid-column: 2; } }
+@media (max-width: 700px) { .balance-grid, .hydration-trend-layout { grid-template-columns: 1fr; }.balance-heading, .progression-heading, .body-overview-heading, .consistency-heading, .hydration-trend-heading { flex-direction: column; }.balance-heading > span { white-space: normal; }.exercise-picker { width: 100%; min-width: 0; }.consistency-summary { width: 100%; grid-template-columns: repeat(3, 1fr); }.consistency-summary div { min-width: 0; }.activity-day-detail { grid-template-columns: 1fr 1fr; }.activity-day-detail > div { grid-column: 1 / -1; } }
+@media (max-width: 600px) { .main-content { padding: 24px 16px 40px; } .profile { display: none; } .summary-grid, .progression-summary { grid-template-columns: 1fr; } .export-actions { width: 100%; }.export-actions button { flex: 1 1 100%; }.period-toolbar > div:last-child { width: 100%; }.period-toolbar button { flex: 1; }.bar-chart { overflow-x: auto; }.date-badge { width: 80px; flex-basis: 80px; }.achievement-heading { flex-direction: column; }.best-item { grid-template-columns: 34px minmax(0, 1fr); }.best-weight { grid-column: 2; }.consistency-summary { grid-template-columns: 1fr; }.consistency-summary div { display: flex; align-items: baseline; justify-content: space-between; text-align: left; }.calendar-weekdays, .activity-calendar { min-width: 480px; }.consistency-card { overflow-x: auto; }.activity-day-detail { min-width: 480px; } }
+@media print {
+  .app-shell { display: block; background: #fff; font-size: 12px; }
+  .sidebar, .topbar-actions, .export-actions, .period-options, .history-footer, .activity-legend { display: none !important; }
+  .main-content { max-width: none; padding: 0; }
+  .topbar { margin-bottom: 18px; }
+  .topbar h1 { font-size: 2rem; }
+  .period-toolbar { padding: 14px 0; border: 0; background: transparent; }
+  .summary-grid { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .summary-card { min-height: 130px; padding: 16px; }
+  .summary-card strong { font-size: 2rem; }
+  .trend-grid, .history-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .trend-card, .body-overview-card, .consistency-card, .balance-card, .progression-card, .achievement-card, .content-card { padding: 16px; break-inside: avoid; box-shadow: none; }
+  .activity-day { min-height: 44px; padding: 6px; box-shadow: none !important; transform: none !important; }
+  .activity-day-detail { break-inside: avoid; }
+  a { color: inherit !important; text-decoration: none !important; }
+}
 </style>

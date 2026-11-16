@@ -1,13 +1,14 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { signOut, fetchAuthSession } from 'aws-amplify/auth'
+import { signOut, fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { loadBodyProgress } from '../services/bodyMetrics'
 import { loadCurrentProfilePreferences } from '../services/profilePreferences'
+import { hydrationUpdatedEvent, loadHydration } from '../services/hydration'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -22,8 +23,12 @@ const workouts = ref([])
 const nutrition = ref([])
 const weeklyWorkoutGoal = ref(3)
 const dailyCalorieGoal = ref(2000)
+const profileConfigured = ref(false)
+const isGoalsLoaded = ref(false)
 const weeklyPlan = ref(null)
 const bodyProgress = ref({ metrics: [], goal: { targetWeightKg: null } })
+const todayHydration = ref({ intakeMl: 0, goalMl: 2000 })
+const hydrationUsername = ref('')
 const todayPlan = computed(() => getTodayPlanDay(weeklyPlan.value))
 const isUpdatingPlan = ref(false)
 const planActionError = ref('')
@@ -135,6 +140,28 @@ const toLocalDate = (date) => {
   return `${year}-${month}-${day}`
 }
 
+const loadTodayHydration = async () => {
+  try {
+    const user = await getCurrentUser()
+    hydrationUsername.value = user.username
+    todayHydration.value = loadHydration(user.username, toLocalDate(new Date()))
+  } catch {
+    hydrationUsername.value = ''
+    todayHydration.value = { intakeMl: 0, goalMl: 2000 }
+  }
+}
+
+const refreshTodayHydration = (event) => {
+  const today = toLocalDate(new Date())
+
+  if (
+    event?.detail?.username === hydrationUsername.value &&
+    event?.detail?.date === today
+  ) {
+    todayHydration.value = loadHydration(hydrationUsername.value, today)
+  }
+}
+
 const currentWeekRange = computed(() => {
   const today = new Date()
   const start = new Date(today)
@@ -199,6 +226,21 @@ const calorieGoalMessage = computed(() => {
   return 'Daily target reached'
 })
 
+const hydrationProgress = computed(() =>
+  Math.min(
+    100,
+    Math.round((todayHydration.value.intakeMl / todayHydration.value.goalMl) * 100),
+  ),
+)
+
+const hydrationMessage = computed(() => {
+  const remaining = todayHydration.value.goalMl - todayHydration.value.intakeMl
+
+  if (remaining > 0) return `${remaining.toLocaleString('en-AU')} ml remaining`
+  if (remaining < 0) return `${Math.abs(remaining).toLocaleString('en-AU')} ml above target`
+  return 'Daily water target reached'
+})
+
 const weightEntries = computed(() =>
   (bodyProgress.value.metrics ?? [])
     .filter((item) => Number.isFinite(Number(item.weightKg)))
@@ -249,6 +291,43 @@ const bodyTrendMessage = computed(() => {
   return `${Math.abs(bodyWeightChange.value).toFixed(1)} kg ${bodyWeightChange.value < 0 ? 'down' : 'up'} since your previous entry`
 })
 
+const onboardingSteps = computed(() => [
+  {
+    label: 'Set your goals',
+    description: 'Choose your weekly workout and daily calorie targets.',
+    to: '/account?section=profile',
+    complete: profileConfigured.value,
+  },
+  {
+    label: 'Save your first workout',
+    description: 'Record exercises, sets, reps, and weight.',
+    to: '/workout',
+    complete: workouts.value.length > 0,
+  },
+  {
+    label: 'Log your first meal',
+    description: 'Add food and nutrition information for a day.',
+    to: '/nutrition',
+    complete: nutrition.value.length > 0,
+  },
+  {
+    label: 'Add a body measurement',
+    description: 'Begin tracking weight or other body changes.',
+    to: '/body',
+    complete: (bodyProgress.value.metrics ?? []).length > 0,
+  },
+])
+
+const completedOnboardingSteps = computed(
+  () => onboardingSteps.value.filter((step) => step.complete).length,
+)
+const showOnboarding = computed(
+  () =>
+    isGoalsLoaded.value &&
+    !loadWarnings.value.length &&
+    completedOnboardingSteps.value < onboardingSteps.value.length,
+)
+
 const loadBodySummary = async () => {
   try {
     bodyProgress.value = await loadBodyProgress()
@@ -264,6 +343,7 @@ const loadGoals = async () => {
     const profile = await loadCurrentProfilePreferences()
     const savedGoal = Number(profile.weeklyWorkoutGoal)
     const savedCalorieGoal = Number(profile.dailyCalorieGoal)
+    profileConfigured.value = Boolean(profile.profileConfigured)
 
     if (Number.isFinite(savedGoal) && savedGoal >= 1 && savedGoal <= 14) {
       weeklyWorkoutGoal.value = savedGoal
@@ -275,6 +355,9 @@ const loadGoals = async () => {
   } catch {
     weeklyWorkoutGoal.value = 3
     dailyCalorieGoal.value = 2000
+    profileConfigured.value = false
+  } finally {
+    isGoalsLoaded.value = true
   }
 }
 
@@ -342,12 +425,15 @@ const loadDashboard = async () => {
 onMounted(() => {
   loadDashboard()
   loadGoals()
+  loadTodayHydration()
   refreshWeeklyPlan()
   window.addEventListener(weeklyPlanUpdatedEvent, refreshWeeklyPlan)
+  window.addEventListener(hydrationUpdatedEvent, refreshTodayHydration)
 })
 
 onUnmounted(() => {
   window.removeEventListener(weeklyPlanUpdatedEvent, refreshWeeklyPlan)
+  window.removeEventListener(hydrationUpdatedEvent, refreshTodayHydration)
 })
 </script>
 
@@ -415,6 +501,38 @@ onUnmounted(() => {
           <p v-for="warning in loadWarnings" :key="warning">{{ warning }}</p>
           <button type="button" @click="loadDashboard">Try again</button>
         </div>
+
+        <section v-if="showOnboarding" class="onboarding-card" aria-labelledby="onboarding-heading">
+          <div class="onboarding-heading">
+            <div>
+              <p>GETTING STARTED</p>
+              <h2 id="onboarding-heading">Build your RepVelta profile</h2>
+              <span>{{ completedOnboardingSteps }} of {{ onboardingSteps.length }} steps complete</span>
+            </div>
+            <div
+              class="onboarding-progress"
+              role="progressbar"
+              :aria-valuenow="completedOnboardingSteps"
+              aria-valuemin="0"
+              :aria-valuemax="onboardingSteps.length"
+            >
+              <span :style="{ width: `${(completedOnboardingSteps / onboardingSteps.length) * 100}%` }"></span>
+            </div>
+          </div>
+
+          <div class="onboarding-steps">
+            <RouterLink
+              v-for="step in onboardingSteps"
+              :key="step.label"
+              :to="step.to"
+              class="onboarding-step"
+              :class="{ complete: step.complete }"
+            >
+              <span class="step-status">{{ step.complete ? '✓' : '→' }}</span>
+              <div><strong>{{ step.label }}</strong><p>{{ step.description }}</p></div>
+            </RouterLink>
+          </div>
+        </section>
 
         <!-- Display a summary of the user's workout activity. -->
         <section class="summary-grid">
@@ -521,6 +639,29 @@ onUnmounted(() => {
             <span>{{ bodyGoalMessage }}</span>
             <small class="goal-detail">{{ bodyTrendMessage }}</small>
             <RouterLink to="/body" class="goal-link">View body metrics →</RouterLink>
+          </article>
+
+          <article class="goal-card hydration-goal">
+            <p>Today’s Water</p>
+
+            <div class="goal-heading">
+              <strong>{{ todayHydration.intakeMl.toLocaleString('en-AU') }}</strong>
+              <span>/ {{ todayHydration.goalMl.toLocaleString('en-AU') }} ml</span>
+            </div>
+
+            <div
+              class="goal-progress hydration-progress"
+              role="progressbar"
+              :aria-valuenow="hydrationProgress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span :style="{ width: `${hydrationProgress}%` }"></span>
+            </div>
+
+            <span>{{ hydrationMessage }}</span>
+            <small class="goal-detail">Saved on this device</small>
+            <RouterLink to="/nutrition" class="goal-link">Track water →</RouterLink>
           </article>
         </section>
 
@@ -898,6 +1039,21 @@ onUnmounted(() => {
 .partial-warning strong { display: block; margin-bottom: 6px; font-size: 1rem; }
 .partial-warning p { margin: 4px 0; font-size: .94rem; line-height: 1.45; }
 .partial-warning button { margin-top: 10px; padding: 8px 12px; border: 1px solid #cbb873; border-radius: 9px; background: #fff; color: #5f5125; font: inherit; font-size: .88rem; font-weight: 800; cursor: pointer; }
+.onboarding-card { margin-bottom: 24px; padding: 25px; border: 1px solid #cadba7; border-radius: 20px; background: linear-gradient(135deg, #f9fce9, #edf5e8); }
+.onboarding-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 19px; }
+.onboarding-heading p { margin: 0 0 5px; color: #6d7b52; font-size: .78rem; font-weight: 850; letter-spacing: .1em; }
+.onboarding-heading h2 { margin: 0 0 5px; font-size: 1.45rem; }
+.onboarding-heading > div > span { color: #637067; font-size: .9rem; font-weight: 700; }
+.onboarding-progress { width: min(280px, 32%); height: 10px; overflow: hidden; border-radius: 999px; background: rgba(36, 76, 64, .12); }
+.onboarding-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7fa33f, #cbed63); transition: width .25s ease; }
+.onboarding-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.onboarding-step { min-width: 0; padding: 14px; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; align-items: start; border: 1px solid rgba(55, 84, 72, .13); border-radius: 13px; background: rgba(255, 255, 255, .74); color: #253f36; text-decoration: none; transition: border-color .17s ease, transform .17s ease; }
+.onboarding-step:hover { border-color: #91ad43; transform: translateY(-2px); }
+.step-status { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: #dff09b; color: #244c40; font-size: .9rem; font-weight: 900; }
+.onboarding-step.complete { background: rgba(244, 247, 242, .72); color: #64716c; }
+.onboarding-step.complete .step-status { background: #dce8e1; color: #315e51; }
+.onboarding-step strong { display: block; font-size: .92rem; line-height: 1.25; }
+.onboarding-step p { margin: 5px 0 0; color: #68756f; font-size: .78rem; line-height: 1.4; }
 .spinner {
   width: 34px;
   height: 34px;
@@ -960,7 +1116,7 @@ onUnmounted(() => {
 
 .goals-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
   margin-bottom: 24px;
 }
@@ -983,6 +1139,15 @@ onUnmounted(() => {
 
 .body-goal {
   background: #f6e4ea;
+}
+
+.hydration-goal {
+  border-color: #cfe2e2;
+  background: #e2f2f3;
+}
+
+.hydration-progress span {
+  background: linear-gradient(90deg, #65abb2, #8ed9df);
 }
 
 .goal-card > p {
@@ -1356,6 +1521,12 @@ onUnmounted(() => {
 
 /* Responsive */
 
+@media (max-width: 1250px) {
+  .goals-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1000px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1368,8 +1539,18 @@ onUnmounted(() => {
   .summary-grid,
   .goals-grid,
   .recent-list,
-  .feature-grid {
+  .feature-grid,
+  .onboarding-steps {
     grid-template-columns: 1fr;
+  }
+
+  .onboarding-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .onboarding-progress {
+    width: 100%;
   }
 }
 

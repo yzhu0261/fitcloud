@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { signOut } from 'aws-amplify/auth'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppNavigation from '../components/AppNavigation.vue'
 import BrandMark from '../components/BrandMark.vue'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
@@ -14,6 +14,7 @@ import {
 } from '../services/bodyMetrics'
 
 const router = useRouter()
+const route = useRoute()
 const metrics = ref([])
 const isLoading = ref(true)
 const isSaving = ref(false)
@@ -33,8 +34,14 @@ const toLocalDate = (date) => {
   return `${year}-${month}-${day}`
 }
 
+const requestedMeasurementDate = () => {
+  const date = typeof route.query.date === 'string' ? route.query.date : ''
+  const currentDate = toLocalDate(new Date())
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= currentDate ? date : currentDate
+}
+
 const emptyForm = () => ({
-  date: toLocalDate(new Date()),
+  date: requestedMeasurementDate(),
   weightKg: '',
   bodyFatPercent: '',
   waistCm: '',

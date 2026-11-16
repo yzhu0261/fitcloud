@@ -194,6 +194,11 @@ export const deleteWeeklyPlan = async (plan) => {
   return cachePlan(null)
 }
 
+export const clearCurrentUserWeeklyPlanCache = async () => {
+  localStorage.removeItem(await getStorageKey())
+  window.dispatchEvent(new CustomEvent(PLAN_UPDATED_EVENT, { detail: null }))
+}
+
 export const getTodayPlanDay = (plan, date = new Date()) => {
   if (!plan?.days) return null
   return plan.days.find((day) => day.date === toLocalDate(date)) || null
