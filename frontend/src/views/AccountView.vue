@@ -14,6 +14,11 @@ import { clearCurrentUserActivityDrafts } from '../services/activityDrafts'
 import { clearCurrentUserBodyMetrics, loadBodyProgress } from '../services/bodyMetrics'
 import { clearCoachConversation, loadCoachConversation } from '../services/coachConversation'
 import { clearCurrentUserHydration, loadHydrationHistory } from '../services/hydration'
+import {
+  clearCurrentUserMealTemplates,
+  getMealTemplateKey,
+  loadMealTemplates,
+} from '../services/mealTemplates'
 import { clearCurrentUserWeeklyPlanCache, loadWeeklyPlan } from '../services/weeklyPlan'
 import {
   clearCurrentUserWorkoutTemplates,
@@ -25,7 +30,10 @@ import {
   fetchAuthSession,
   fetchUserAttributes,
   getCurrentUser,
+  confirmUserAttribute,
+  sendUserAttributeVerificationCode,
   signOut,
+  updateUserAttribute,
   updatePassword,
 } from 'aws-amplify/auth'
 
@@ -56,6 +64,14 @@ const isDeletingAccount = ref(false)
 const isExportingData = ref(false)
 const dataExportMessage = ref('')
 const dataExportError = ref('')
+const showEmailChange = ref(false)
+const newEmail = ref('')
+const emailVerificationCode = ref('')
+const emailChangeStep = ref('email')
+const emailChangeMessage = ref('')
+const emailChangeError = ref('')
+const isUpdatingEmail = ref(false)
+const isResendingEmailCode = ref(false)
 
 const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
 
@@ -174,6 +190,115 @@ const changePassword = async () => {
   }
 }
 
+const resetEmailChange = () => {
+  showEmailChange.value = false
+  newEmail.value = ''
+  emailVerificationCode.value = ''
+  emailChangeStep.value = 'email'
+  emailChangeMessage.value = ''
+  emailChangeError.value = ''
+}
+
+const emailErrorMessage = (error, fallback) => {
+  if (error?.name === 'AliasExistsException') {
+    return 'This email address is already connected to another account.'
+  }
+  if (error?.name === 'CodeMismatchException') return 'The verification code is incorrect.'
+  if (error?.name === 'ExpiredCodeException') {
+    return 'This verification code has expired. Request a new code.'
+  }
+  if (error?.name === 'LimitExceededException') {
+    return 'Too many attempts were made. Please wait before trying again.'
+  }
+  return error?.message || fallback
+}
+
+const requestEmailChange = async () => {
+  if (isUpdatingEmail.value) return
+
+  emailChangeMessage.value = ''
+  emailChangeError.value = ''
+  const requestedEmail = newEmail.value.trim().toLowerCase()
+
+  if (!/^\S+@\S+\.\S+$/.test(requestedEmail)) {
+    emailChangeError.value = 'Enter a valid email address.'
+    return
+  }
+  if (requestedEmail === email.value.toLowerCase()) {
+    emailChangeError.value = 'Enter an email address different from your current one.'
+    return
+  }
+
+  isUpdatingEmail.value = true
+
+  try {
+    const result = await updateUserAttribute({
+      userAttribute: { attributeKey: 'email', value: requestedEmail },
+    })
+
+    newEmail.value = requestedEmail
+    if (result.isUpdated || result.nextStep.updateAttributeStep === 'DONE') {
+      email.value = requestedEmail
+      emailChangeMessage.value = 'Your sign-in email has been updated.'
+      emailChangeStep.value = 'complete'
+    } else {
+      const destination = result.nextStep.codeDeliveryDetails?.destination
+      emailChangeStep.value = 'code'
+      emailChangeMessage.value = destination
+        ? `A verification code was sent to ${destination}.`
+        : 'A verification code was sent to your new email address.'
+    }
+  } catch (error) {
+    emailChangeError.value = emailErrorMessage(error, 'We could not start the email change.')
+  } finally {
+    isUpdatingEmail.value = false
+  }
+}
+
+const confirmEmailChange = async () => {
+  if (isUpdatingEmail.value) return
+
+  emailChangeMessage.value = ''
+  emailChangeError.value = ''
+  const code = emailVerificationCode.value.trim()
+
+  if (!code) {
+    emailChangeError.value = 'Enter the verification code from your email.'
+    return
+  }
+
+  isUpdatingEmail.value = true
+
+  try {
+    await confirmUserAttribute({ userAttributeKey: 'email', confirmationCode: code })
+    email.value = newEmail.value
+    emailVerificationCode.value = ''
+    emailChangeStep.value = 'complete'
+    emailChangeMessage.value = 'Your email has been verified and updated. Use it the next time you sign in.'
+  } catch (error) {
+    emailChangeError.value = emailErrorMessage(error, 'We could not verify the new email.')
+  } finally {
+    isUpdatingEmail.value = false
+  }
+}
+
+const resendEmailCode = async () => {
+  if (isResendingEmailCode.value) return
+
+  emailChangeMessage.value = ''
+  emailChangeError.value = ''
+  isResendingEmailCode.value = true
+
+  try {
+    await sendUserAttributeVerificationCode({ userAttributeKey: 'email' })
+    emailChangeMessage.value = 'A new verification code was sent.'
+  } catch (error) {
+    emailChangeError.value = emailErrorMessage(error, 'We could not send another code.')
+  } finally {
+    isResendingEmailCode.value = false
+  }
+}
+
 const handleLogout = async () => {
   await signOut()
   router.push('/login')
@@ -209,6 +334,7 @@ const downloadAccountData = async () => {
       loadWeeklyPlan(),
       loadCoachConversation(),
       getWorkoutTemplateKey().then(loadWorkoutTemplates),
+      getMealTemplateKey().then(loadMealTemplates),
     ])
     const warnings = []
     const resultValue = (index, fallback, label) => {
@@ -237,6 +363,7 @@ const downloadAccountData = async () => {
       weeklyPlan: resultValue(3, null, 'Weekly plan'),
       coachConversation: resultValue(4, [], 'AI Coach conversation'),
       workoutTemplates: resultValue(5, [], 'Workout templates'),
+      mealTemplates: resultValue(6, [], 'Meal templates'),
       hydration: loadHydrationHistory(username.value),
       warnings,
     }
@@ -279,6 +406,7 @@ const handleDeleteAccount = async () => {
       clearCurrentUserBodyMetrics(),
       clearCoachConversation(),
       clearCurrentUserHydration(),
+      clearCurrentUserMealTemplates(),
       clearCurrentUserWeeklyPlanCache(),
       clearCurrentUserWorkoutTemplates(),
     ])
@@ -392,7 +520,97 @@ onBeforeUnmount(() => {
               <div class="form-group">
                 <label>Email address</label>
                 <input :value="email" type="email" disabled />
-                <small>Email is managed by your sign-in account.</small>
+                <small>This is your current verified sign-in email.</small>
+              </div>
+
+              <div class="email-management">
+                <button
+                  v-if="!showEmailChange"
+                  type="button"
+                  class="secondary-button"
+                  @click="showEmailChange = true"
+                >
+                  Change email address
+                </button>
+
+                <div v-else class="email-change-panel">
+                  <div class="email-change-heading">
+                    <div>
+                      <strong>Change sign-in email</strong>
+                      <span>A verification code may be sent to the new address.</span>
+                    </div>
+                    <button type="button" @click="resetEmailChange">Cancel</button>
+                  </div>
+
+                  <label v-if="emailChangeStep === 'email'" class="email-change-field">
+                    <span>New email address</span>
+                    <input
+                      v-model="newEmail"
+                      type="email"
+                      autocomplete="email"
+                      placeholder="new@example.com"
+                      @keydown.enter.prevent="requestEmailChange"
+                    />
+                  </label>
+
+                  <label v-else-if="emailChangeStep === 'code'" class="email-change-field">
+                    <span>Verification code</span>
+                    <input
+                      v-model="emailVerificationCode"
+                      type="text"
+                      inputmode="numeric"
+                      autocomplete="one-time-code"
+                      maxlength="12"
+                      placeholder="Enter the code"
+                      @keydown.enter.prevent="confirmEmailChange"
+                    />
+                  </label>
+
+                  <p v-if="emailChangeMessage" class="email-change-message">
+                    {{ emailChangeMessage }}
+                  </p>
+                  <p v-if="emailChangeError" class="email-change-message email-change-error" role="alert">
+                    {{ emailChangeError }}
+                  </p>
+
+                  <div class="email-change-actions">
+                    <button
+                      v-if="emailChangeStep === 'email'"
+                      type="button"
+                      class="primary-button"
+                      :disabled="isUpdatingEmail"
+                      @click="requestEmailChange"
+                    >
+                      {{ isUpdatingEmail ? 'Sending...' : 'Send verification code' }}
+                    </button>
+                    <template v-else-if="emailChangeStep === 'code'">
+                      <button
+                        type="button"
+                        class="primary-button"
+                        :disabled="isUpdatingEmail"
+                        @click="confirmEmailChange"
+                      >
+                        {{ isUpdatingEmail ? 'Verifying...' : 'Verify and update email' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="secondary-button"
+                        :disabled="isResendingEmailCode"
+                        @click="resendEmailCode"
+                      >
+                        {{ isResendingEmailCode ? 'Sending...' : 'Send a new code' }}
+                      </button>
+                    </template>
+                    <button
+                      v-else
+                      type="button"
+                      class="primary-button"
+                      @click="resetEmailChange"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div class="goal-grid">
@@ -472,7 +690,7 @@ onBeforeUnmount(() => {
             <div>
               <p class="eyebrow">DANGER ZONE</p>
               <h2>Delete account</h2>
-              <p>Permanently delete your profile, workouts, nutrition records, body data, plans, hydration history, workout templates, AI Coach conversation, Cognito account, and sign-in access. Your account cannot be restored after deletion.</p>
+              <p>Permanently delete your profile, workouts, nutrition records, body data, plans, hydration history, workout and meal templates, AI Coach conversation, Cognito account, and sign-in access. Your account cannot be restored after deletion.</p>
             </div>
             <button
               type="button"
@@ -537,6 +755,21 @@ onBeforeUnmount(() => {
 .form-group input:focus { border-color: #91ae3e; box-shadow: 0 0 0 3px rgba(203, 237, 99, .25); }
 .form-group input:disabled { background: #f3f5f3; color: #68736f; }
 .form-group small { color: #68736f; font-size: .92rem; line-height: 1.45; }
+.secondary-button { width: fit-content; min-height: 44px; padding: 9px 14px; border: 1px solid #c9d6ce; border-radius: 10px; background: #fff; color: #315e51; font: inherit; font-size: .92rem; font-weight: 800; cursor: pointer; }
+.secondary-button:hover:not(:disabled) { border-color: #96b349; background: #f1f7dc; }
+.secondary-button:disabled { opacity: .6; cursor: wait; }
+.email-management { margin-top: -7px; }
+.email-change-panel { padding: 18px; border: 1px solid #d3ddd7; border-radius: 14px; background: #f7faf8; }
+.email-change-heading { margin-bottom: 14px; }
+.email-change-heading strong { color: #24483d; font-size: 1rem; }
+.email-change-heading strong::after { display: block; margin-top: 4px; color: #65736d; content: 'A verification code will be sent before the new address becomes active.'; font-size: .86rem; font-weight: 500; line-height: 1.45; }
+.email-change-field { display: grid; gap: 7px; color: #52615d; font-size: .9rem; font-weight: 800; }
+.email-change-field input { min-height: 48px; padding: 11px 13px; border: 1px solid #ccd8d1; border-radius: 10px; background: #fff; color: #172033; font: inherit; }
+.email-change-field input:focus { border-color: #91ae3e; outline: 3px solid rgba(203, 237, 99, .25); }
+.email-change-message { margin: 13px 0 0; padding: 10px 12px; border-radius: 9px; background: #e8f3e4; color: #315e51; font-size: .9rem; font-weight: 700; line-height: 1.45; }
+.email-change-error { background: #fff2f0; color: #a52b20; }
+.email-change-actions { margin-top: 15px; display: flex; flex-wrap: wrap; gap: 9px; }
+.email-change-actions .primary-button { width: auto; min-height: 44px; padding: 9px 15px; }
 .form-message { margin: 0; padding: 12px 14px; border-radius: 10px; background: #edf5e9; color: #315e51; font-size: .98rem; line-height: 1.5; }
 .error-text { background: #fff2f0; color: #a52b20; }
 .primary-button { min-height: 52px; padding: 13px 20px; border: 0; border-radius: 12px; background: #cbed63; color: #17352c; font-size: 1rem; font-weight: 850; cursor: pointer; }
@@ -556,5 +789,5 @@ onBeforeUnmount(() => {
 .danger-button:hover { background: #fff0ee; }
 .danger-button:disabled { opacity: .6; cursor: wait; }
 @media (max-width: 1000px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } }
-@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .topbar { align-items: flex-start; } .back-link { display: none; } .goal-grid { grid-template-columns: 1fr; } .danger-card, .data-export-card { align-items: flex-start; flex-direction: column; } .danger-button, .export-data-button { width: 100%; } }
+@media (max-width: 650px) { .main-content { padding: 24px 16px 40px; } .topbar { align-items: flex-start; } .back-link { display: none; } .goal-grid { grid-template-columns: 1fr; } .danger-card, .data-export-card { align-items: flex-start; flex-direction: column; } .danger-button, .export-data-button { width: 100%; }.email-change-actions { flex-direction: column; }.email-change-actions button { width: 100% !important; } }
 </style>

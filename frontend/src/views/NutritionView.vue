@@ -96,6 +96,60 @@
         </p>
       </section>
 
+      <section class="macro-balance-card" aria-labelledby="macro-balance-heading">
+        <div class="macro-balance-heading">
+          <div>
+            <p class="eyebrow">MACRO BALANCE</p>
+            <h2 id="macro-balance-heading">Calories by macronutrient</h2>
+            <p>See how protein, carbohydrates, and fat contribute to this date's intake.</p>
+          </div>
+
+          <div
+            class="macro-ring"
+            :class="{ 'macro-ring-empty': totalMacroCalories === 0 }"
+            :style="macroChartStyle"
+            role="img"
+            :aria-label="macroChartLabel"
+          >
+            <div>
+              <strong>{{ totalMacroCalories.toLocaleString('en-AU') }}</strong>
+              <span>estimated kcal</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="totalMacroCalories > 0" class="macro-breakdown">
+          <article v-for="macro in macroBreakdown" :key="macro.key" class="macro-row">
+            <div class="macro-row-heading">
+              <span class="macro-label">
+                <i :style="{ backgroundColor: macro.colour }" aria-hidden="true"></i>
+                {{ macro.label }}
+              </span>
+              <strong>{{ macro.grams }} g · {{ macro.calories }} kcal · {{ macro.percentage }}%</strong>
+            </div>
+            <div
+              class="macro-progress"
+              role="progressbar"
+              :aria-label="`${macro.label}: ${macro.percentage}% of estimated macro calories`"
+              :aria-valuenow="macro.percentage"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <span :style="{ width: `${macro.percentage}%`, backgroundColor: macro.colour }"></span>
+            </div>
+          </article>
+        </div>
+
+        <p v-else class="macro-empty">
+          Add a food with protein, carbohydrates, or fat to see the daily balance.
+        </p>
+
+        <p class="macro-note">
+          Estimated from 4 kcal per gram of protein or carbohydrate and 9 kcal per gram of fat.
+          It may differ from the entered calorie total because of rounding, fibre, or food labels.
+        </p>
+      </section>
+
       <section class="hydration-card" aria-labelledby="hydration-heading">
         <div class="hydration-visual" aria-hidden="true">
           <span>H<sub>2</sub>O</span>
@@ -169,6 +223,28 @@
           <div>
             <p class="eyebrow">MEAL TRACKER</p>
             <h2>Add Food</h2>
+          </div>
+        </div>
+
+        <div v-if="mealTemplates.length" class="meal-template-library">
+          <div class="meal-template-heading">
+            <div>
+              <strong>Your saved meals</strong>
+              <span>Load a complete meal, then adjust any food before saving.</span>
+            </div>
+            <small>{{ mealTemplates.length }}/8 saved on this device</small>
+          </div>
+          <div class="meal-template-list">
+            <article v-for="template in mealTemplates" :key="template.id">
+              <div>
+                <strong>{{ template.title }}</strong>
+                <span>{{ template.foods.length }} food{{ template.foods.length === 1 ? '' : 's' }} · {{ mealTemplateCalories(template) }} kcal</span>
+              </div>
+              <div class="meal-template-actions">
+                <button type="button" @click="applyMealTemplate(template)">Add meal</button>
+                <button type="button" class="delete-meal-template" @click="deleteMealTemplate(template)">Delete</button>
+              </div>
+            </article>
           </div>
         </div>
 
@@ -283,12 +359,36 @@
             <button
               v-if="foods.length"
               type="button"
+              class="save-meal-template-button"
+              :disabled="editingPendingFoodIndex >= 0"
+              @click="showMealTemplateForm = !showMealTemplateForm; mealTemplateError = ''"
+            >
+              {{ showMealTemplateForm ? 'Cancel template' : 'Save as meal' }}
+            </button>
+            <button
+              v-if="foods.length"
+              type="button"
               class="clear-meals-button"
               @click="clearPendingMeals"
             >
               Clear pending meals
             </button>
           </div>
+        </div>
+
+        <div v-if="showMealTemplateForm" class="save-meal-template-form">
+          <label>
+            <span>Meal template name</span>
+            <input
+              v-model="mealTemplateName"
+              type="text"
+              maxlength="40"
+              placeholder="e.g. Post-workout meal"
+              @keydown.enter.prevent="savePendingMealTemplate"
+            />
+          </label>
+          <button type="button" @click="savePendingMealTemplate">Save meal template</button>
+          <p v-if="mealTemplateError" role="alert">{{ mealTemplateError }}</p>
         </div>
 
         <p v-if="mealActionNotice" class="meal-action-notice" aria-live="polite">
@@ -550,6 +650,11 @@ import AppNavigation from '../components/AppNavigation.vue'
 import { loadCurrentProfilePreferences } from '../services/profilePreferences'
 import { loadHydration, saveHydration } from '../services/hydration'
 import {
+  getMealTemplateKey,
+  loadMealTemplates,
+  saveMealTemplates,
+} from '../services/mealTemplates'
+import {
   clearActivityDraft,
   getActivityDraftKey,
   loadActivityDraft,
@@ -588,6 +693,11 @@ const foods = ref([])
 const editingPendingFoodIndex = ref(-1)
 const nutritionDraftKey = ref('')
 const nutritionDraftNotice = ref('')
+const mealTemplates = ref([])
+const mealTemplateKey = ref('')
+const showMealTemplateForm = ref(false)
+const mealTemplateName = ref('')
+const mealTemplateError = ref('')
 
 // Store nutrition records loaded from the backend.
 const nutritionHistory = ref([])
@@ -731,6 +841,75 @@ const repeatNutritionRecord = (record) => {
   })
 }
 
+const mealTemplateCalories = (template) =>
+  template.foods.reduce((total, food) => total + Number(food.calories || 0), 0)
+
+const initializeMealTemplates = async () => {
+  try {
+    mealTemplateKey.value = await getMealTemplateKey()
+    mealTemplates.value = loadMealTemplates(mealTemplateKey.value)
+  } catch {
+    mealTemplateKey.value = ''
+    mealTemplates.value = []
+  }
+}
+
+const savePendingMealTemplate = () => {
+  mealTemplateError.value = ''
+  const name = mealTemplateName.value.trim()
+
+  if (!mealTemplateKey.value) {
+    mealTemplateError.value = 'Meal templates are not available yet. Refresh and try again.'
+    return
+  }
+  if (!name) {
+    mealTemplateError.value = 'Enter a name for this meal template.'
+    return
+  }
+  if (!foods.value.length) {
+    mealTemplateError.value = 'Add at least one food before saving a meal template.'
+    return
+  }
+  if (mealTemplates.value.some((template) => template.title.toLowerCase() === name.toLowerCase())) {
+    mealTemplateError.value = 'A meal template with this name already exists.'
+    return
+  }
+
+  const template = {
+    id: `meal-${Date.now()}`,
+    title: name,
+    foods: foods.value.map((food) => ({ ...food })),
+  }
+
+  mealTemplates.value = saveMealTemplates(mealTemplateKey.value, [
+    template,
+    ...mealTemplates.value,
+  ])
+  mealTemplateName.value = ''
+  showMealTemplateForm.value = false
+  mealActionNotice.value = `${template.title} was saved to your meal templates on this device.`
+}
+
+const applyMealTemplate = (template) => {
+  foods.value.push(...template.foods.map((food) => ({ ...food })))
+  mealActionNotice.value = `${template.foods.length} food${template.foods.length === 1 ? '' : 's'} added from ${template.title}. Review them before saving.`
+  requestAnimationFrame(() => {
+    document.getElementById('todays-meals')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+const deleteMealTemplate = (template) => {
+  const confirmed = window.confirm(`Delete the “${template.title}” meal template?`)
+
+  if (!confirmed) return
+
+  mealTemplates.value = saveMealTemplates(
+    mealTemplateKey.value,
+    mealTemplates.value.filter((item) => item.id !== template.id),
+  )
+  mealActionNotice.value = `${template.title} was deleted. Saved nutrition history was not changed.`
+}
+
 // Calculate the total nutrition values from today's food records.
 const totalCalories = computed(() => {
   return selectedDateFoods.value.reduce((total, food) => {
@@ -754,6 +933,44 @@ const totalFat = computed(() => {
   return selectedDateFoods.value.reduce((total, food) => {
     return total + Number(food.fat)
   }, 0)
+})
+
+const macroBreakdown = computed(() => {
+  const values = [
+    { key: 'protein', label: 'Protein', grams: totalProtein.value, calories: Math.round(totalProtein.value * 4), colour: '#e5ad3d' },
+    { key: 'carbs', label: 'Carbohydrates', grams: totalCarbs.value, calories: Math.round(totalCarbs.value * 4), colour: '#91b943' },
+    { key: 'fat', label: 'Fat', grams: totalFat.value, calories: Math.round(totalFat.value * 9), colour: '#d9859f' },
+  ]
+  const total = values.reduce((sum, macro) => sum + macro.calories, 0)
+
+  return values.map((macro) => ({
+    ...macro,
+    percentage: total > 0 ? Math.round((macro.calories / total) * 100) : 0,
+  }))
+})
+
+const totalMacroCalories = computed(() =>
+  macroBreakdown.value.reduce((sum, macro) => sum + macro.calories, 0),
+)
+
+const macroChartStyle = computed(() => {
+  if (totalMacroCalories.value === 0) return {}
+
+  const [protein, carbs] = macroBreakdown.value
+  const proteinEnd = protein.percentage
+  const carbsEnd = Math.min(100, proteinEnd + carbs.percentage)
+
+  return {
+    background: `conic-gradient(#e5ad3d 0 ${proteinEnd}%, #91b943 ${proteinEnd}% ${carbsEnd}%, #d9859f ${carbsEnd}% 100%)`,
+  }
+})
+
+const macroChartLabel = computed(() => {
+  if (totalMacroCalories.value === 0) return 'No macronutrient calories recorded'
+
+  return macroBreakdown.value
+    .map((macro) => `${macro.label} ${macro.percentage}%`)
+    .join(', ')
 })
 
 const calorieGoalProgress = computed(() =>
@@ -1151,6 +1368,7 @@ watch([historySearch, historyDateFrom, historyDateTo], () => {
 onMounted(() => {
   initializeNutritionDraft()
   initializeHydration()
+  initializeMealTemplates()
   loadNutrition()
   loadCalorieGoal()
 })
@@ -1565,6 +1783,139 @@ const deleteNutrition = async (nutritionId) => {
   font-size: 0.84rem;
 }
 
+.macro-balance-card {
+  margin-bottom: 24px;
+  padding: 26px;
+  border: 1px solid #e0e5df;
+  border-radius: 20px;
+  background: #ffffff;
+}
+
+.macro-balance-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.macro-balance-heading h2 {
+  margin: 5px 0 6px;
+  font-size: 1.45rem;
+}
+
+.macro-balance-heading p:last-child {
+  max-width: 630px;
+  margin: 0;
+  color: #607069;
+  font-size: 1rem;
+}
+
+.macro-ring {
+  width: 136px;
+  height: 136px;
+  flex: 0 0 136px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.macro-ring::before {
+  content: '';
+  grid-area: 1 / 1;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(29, 58, 48, 0.05);
+}
+
+.macro-ring > div {
+  z-index: 1;
+  grid-area: 1 / 1;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+}
+
+.macro-ring strong {
+  color: #193d33;
+  font-size: 1.28rem;
+}
+
+.macro-ring span {
+  color: #708078;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.macro-ring-empty {
+  background: #edf1ee;
+}
+
+.macro-breakdown {
+  margin-top: 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.macro-row-heading {
+  margin-bottom: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.macro-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #273c35;
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.macro-label i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.macro-row-heading strong {
+  color: #65736d;
+  font-size: 0.88rem;
+}
+
+.macro-progress {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf1ee;
+}
+
+.macro-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.35s ease;
+}
+
+.macro-empty {
+  margin: 22px 0 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f3f6f3;
+  color: #617169;
+  font-weight: 650;
+}
+
+.macro-note {
+  margin: 18px 0 0;
+  color: #7a8781;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
 .hydration-card {
   margin-bottom: 24px;
   padding: 24px 26px;
@@ -1758,6 +2109,98 @@ const deleteNutrition = async (nutritionId) => {
   align-items: end;
 }
 
+.meal-template-library {
+  margin-bottom: 18px;
+  padding: 17px;
+  border: 1px solid #d8e5dc;
+  border-radius: 15px;
+  background: #f5f9f6;
+}
+
+.meal-template-heading {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.meal-template-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.meal-template-heading strong {
+  color: #28483e;
+  font-size: 1rem;
+}
+
+.meal-template-heading span,
+.meal-template-heading small {
+  color: #718079;
+  font-size: .82rem;
+}
+
+.meal-template-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.meal-template-list article {
+  min-width: 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid #d7e2dc;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.meal-template-list article > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.meal-template-list article > div:first-child strong,
+.meal-template-list article > div:first-child span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meal-template-list article > div:first-child span {
+  color: #718079;
+  font-size: .8rem;
+}
+
+.meal-template-actions {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.meal-template-actions button {
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #bad552;
+  border-radius: 9px;
+  background: #e9f6b9;
+  color: #315e51;
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.meal-template-actions .delete-meal-template {
+  border-color: #e3c2bd;
+  background: #fff;
+  color: #a43a30;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -1901,6 +2344,74 @@ const deleteNutrition = async (nutritionId) => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.save-meal-template-button {
+  min-height: 36px;
+  padding: 8px 11px;
+  border: 1px solid #b5ce65;
+  border-radius: 9px;
+  background: #eff8cf;
+  color: #315e51;
+  font: inherit;
+  font-size: .86rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.save-meal-template-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.save-meal-template-form {
+  margin: 0 0 16px;
+  padding: 15px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid #d8e5dc;
+  border-radius: 13px;
+  background: #f5f9f6;
+}
+
+.save-meal-template-form label {
+  display: grid;
+  gap: 6px;
+  color: #52615d;
+  font-size: .86rem;
+  font-weight: 800;
+}
+
+.save-meal-template-form input {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #ccd8d1;
+  border-radius: 9px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+}
+
+.save-meal-template-form > button {
+  min-height: 44px;
+  padding: 9px 14px;
+  border: 1px solid #bad552;
+  border-radius: 9px;
+  background: #e2f58b;
+  color: #17352c;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.save-meal-template-form p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #a43a30;
+  font-size: .88rem;
+  font-weight: 700;
 }
 
 .clear-meals-button {
@@ -2360,6 +2871,10 @@ const deleteNutrition = async (nutritionId) => {
 
   .history-filters { grid-template-columns: 1fr 1fr; }
   .history-search { grid-column: 1 / -1; }
+
+  .meal-template-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -2425,8 +2940,39 @@ const deleteNutrition = async (nutritionId) => {
     flex-direction: column;
   }
 
+  .meal-template-list,
+  .save-meal-template-form {
+    grid-template-columns: 1fr;
+  }
+
+  .meal-template-heading {
+    flex-direction: column;
+  }
+
   .calorie-goal-card {
     grid-template-columns: 1fr;
+  }
+
+  .macro-balance-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .macro-ring {
+    width: 120px;
+    height: 120px;
+    flex-basis: 120px;
+  }
+
+  .macro-ring::before {
+    width: 84px;
+    height: 84px;
+  }
+
+  .macro-row-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
   }
 
   .goal-stats,
