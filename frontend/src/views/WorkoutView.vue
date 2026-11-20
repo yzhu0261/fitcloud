@@ -6,6 +6,7 @@ import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import AppIcon from '../components/AppIcon.vue'
+import DateNavigator from '../components/DateNavigator.vue'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -862,10 +863,7 @@ onUnmounted(stopRestTimer)
         </div>
 
         <div class="topbar-tools">
-          <label class="log-date-control">
-            <span>Log date</span>
-            <input v-model="selectedWorkoutDate" type="date" :max="today" />
-          </label>
+          <DateNavigator v-model="selectedWorkoutDate" :max="today" />
           <UserProfileBadge />
         </div>
       </header>
@@ -1575,35 +1573,6 @@ onUnmounted(stopRestTimer)
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.log-date-control {
-  min-width: 175px;
-  padding: 8px 12px;
-  display: grid;
-  gap: 3px;
-  border: 1px solid #d9e1dc;
-  border-radius: 13px;
-  background: #fffefd;
-}
-
-.log-date-control span {
-  color: #68766f;
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.log-date-control input {
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #17352c;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 750;
 }
 
 .profile {
@@ -2587,8 +2556,7 @@ onUnmounted(stopRestTimer)
     flex-direction: column;
   }
 
-  .topbar-tools,
-  .log-date-control {
+  .topbar-tools {
     width: 100%;
   }
 

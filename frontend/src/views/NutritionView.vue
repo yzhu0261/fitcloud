@@ -36,10 +36,7 @@
         </div>
 
         <div class="topbar-tools">
-          <label class="log-date-control">
-            <span>Log date</span>
-            <input v-model="selectedNutritionDate" type="date" :max="today" />
-          </label>
+          <DateNavigator v-model="selectedNutritionDate" :max="today" />
           <UserProfileBadge />
         </div>
       </header>
@@ -147,6 +144,51 @@
         <p class="macro-note">
           Estimated from 4 kcal per gram of protein or carbohydrate and 9 kcal per gram of fat.
           It may differ from the entered calorie total because of rounding, fibre, or food labels.
+        </p>
+      </section>
+
+      <section class="nutrition-week-card" aria-labelledby="nutrition-week-heading">
+        <div class="nutrition-week-heading">
+          <div>
+            <p class="eyebrow">7-DAY VIEW</p>
+            <h2 id="nutrition-week-heading">Nutrition consistency</h2>
+            <p>The seven days ending {{ selectedDateLabel }}, compared with your calorie target.</p>
+          </div>
+
+          <div class="nutrition-week-stats">
+            <span><strong>{{ weeklyLoggedDays }}</strong> days logged</span>
+            <span><strong>{{ weeklyAverageCalories.toLocaleString('en-AU') }}</strong> avg kcal</span>
+          </div>
+        </div>
+
+        <div
+          class="nutrition-week-chart"
+          :style="{ '--goal-position': `${weeklyGoalLinePosition}%` }"
+          :aria-label="weeklyNutritionChartLabel"
+          role="img"
+        >
+          <div class="week-goal-label" aria-hidden="true">
+            Goal {{ dailyCalorieGoal.toLocaleString('en-AU') }}
+          </div>
+          <article
+            v-for="day in weeklyNutritionDays"
+            :key="day.date"
+            :class="['nutrition-week-day', { selected: day.isSelected }]"
+          >
+            <span class="week-calories">{{ day.calories ? day.calories.toLocaleString('en-AU') : '—' }}</span>
+            <div class="week-bar-track" aria-hidden="true">
+              <span
+                :class="{ reached: day.calories >= dailyCalorieGoal }"
+                :style="{ height: `${day.barPercentage}%` }"
+              ></span>
+            </div>
+            <strong>{{ day.weekday }}</strong>
+            <small>{{ day.dayNumber }}</small>
+          </article>
+        </div>
+
+        <p class="nutrition-week-note">
+          Average uses logged days only. The selected day includes foods waiting to be saved.
         </p>
       </section>
 
@@ -647,6 +689,7 @@ import { fetchAuthSession, getCurrentUser, signOut } from 'aws-amplify/auth'
 import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
+import DateNavigator from '../components/DateNavigator.vue'
 import { loadCurrentProfilePreferences } from '../services/profilePreferences'
 import { loadHydration, saveHydration } from '../services/hydration'
 import {
@@ -971,6 +1014,72 @@ const macroChartLabel = computed(() => {
   return macroBreakdown.value
     .map((macro) => `${macro.label} ${macro.percentage}%`)
     .join(', ')
+})
+
+const weeklyNutritionDays = computed(() => {
+  const end = new Date(`${selectedNutritionDate.value}T12:00:00`)
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(end)
+    date.setDate(end.getDate() - (6 - index))
+    const dateKey = toLocalDate(date)
+    const dayFoods = dateKey === selectedNutritionDate.value
+      ? selectedDateFoods.value
+      : nutritionHistory.value
+          .filter((record) => record.date === dateKey)
+          .flatMap((record) => record.foods ?? [])
+    const caloriesForDay = Math.round(
+      dayFoods.reduce((sum, food) => sum + Number(food.calories || 0), 0),
+    )
+
+    return {
+      date: dateKey,
+      weekday: new Intl.DateTimeFormat('en-AU', { weekday: 'short' }).format(date),
+      dayNumber: date.getDate(),
+      calories: caloriesForDay,
+      isSelected: dateKey === selectedNutritionDate.value,
+    }
+  })
+  const scaleMaximum = Math.max(
+    dailyCalorieGoal.value,
+    ...days.map((day) => day.calories),
+    1,
+  )
+
+  return days.map((day) => ({
+    ...day,
+    barPercentage: Math.min(100, Math.round((day.calories / scaleMaximum) * 100)),
+  }))
+})
+
+const weeklyLoggedDays = computed(
+  () => weeklyNutritionDays.value.filter((day) => day.calories > 0).length,
+)
+
+const weeklyAverageCalories = computed(() => {
+  const loggedDays = weeklyNutritionDays.value.filter((day) => day.calories > 0)
+  if (!loggedDays.length) return 0
+
+  return Math.round(
+    loggedDays.reduce((sum, day) => sum + day.calories, 0) / loggedDays.length,
+  )
+})
+
+const weeklyGoalLinePosition = computed(() => {
+  const scaleMaximum = Math.max(
+    dailyCalorieGoal.value,
+    ...weeklyNutritionDays.value.map((day) => day.calories),
+    1,
+  )
+
+  return Math.round((dailyCalorieGoal.value / scaleMaximum) * 100)
+})
+
+const weeklyNutritionChartLabel = computed(() => {
+  const summary = weeklyNutritionDays.value
+    .map((day) => `${day.weekday} ${day.dayNumber}: ${day.calories} calories`)
+    .join(', ')
+
+  return `Seven-day calorie chart. Daily target ${dailyCalorieGoal.value} calories. ${summary}`
 })
 
 const calorieGoalProgress = computed(() =>
@@ -1616,35 +1725,6 @@ const deleteNutrition = async (nutritionId) => {
   gap: 12px;
 }
 
-.log-date-control {
-  min-width: 175px;
-  padding: 8px 12px;
-  display: grid;
-  gap: 3px;
-  border: 1px solid #d9e1dc;
-  border-radius: 13px;
-  background: #fffefd;
-}
-
-.log-date-control span {
-  color: #68766f;
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.log-date-control input {
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #17352c;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 750;
-}
-
 .account-pill {
   display: flex;
   flex-direction: column;
@@ -1914,6 +1994,150 @@ const deleteNutrition = async (nutritionId) => {
   color: #7a8781;
   font-size: 0.82rem;
   line-height: 1.5;
+}
+
+.nutrition-week-card {
+  margin-bottom: 24px;
+  padding: 26px;
+  overflow: hidden;
+  border: 1px solid #dce5e0;
+  border-radius: 20px;
+  background: linear-gradient(145deg, #ffffff, #f4f8f5);
+}
+
+.nutrition-week-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.nutrition-week-heading h2 {
+  margin: 5px 0 6px;
+  font-size: 1.45rem;
+}
+
+.nutrition-week-heading p:last-child {
+  margin: 0;
+  color: #607069;
+  font-size: 1rem;
+}
+
+.nutrition-week-stats {
+  display: flex;
+  gap: 10px;
+}
+
+.nutrition-week-stats span {
+  min-width: 108px;
+  padding: 11px 13px;
+  display: grid;
+  gap: 2px;
+  border: 1px solid #d9e5dc;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #6d7b75;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nutrition-week-stats strong {
+  color: #24483d;
+  font-size: 1.15rem;
+}
+
+.nutrition-week-chart {
+  position: relative;
+  min-height: 235px;
+  margin-top: 26px;
+  padding: 28px 12px 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(48px, 1fr));
+  gap: 12px;
+  border-bottom: 1px solid #dde5e0;
+}
+
+.week-goal-label {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  color: #718079;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.nutrition-week-day {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 22px 160px auto auto;
+  justify-items: center;
+  gap: 5px;
+  color: #66756e;
+}
+
+.nutrition-week-day.selected {
+  color: #173f34;
+}
+
+.week-calories {
+  overflow: hidden;
+  max-width: 100%;
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+}
+
+.week-bar-track {
+  position: relative;
+  width: min(42px, 72%);
+  height: 160px;
+  display: flex;
+  align-items: flex-end;
+  overflow: visible;
+  border-radius: 10px 10px 4px 4px;
+  background: #e7eeea;
+}
+
+.week-bar-track::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  right: -6px;
+  bottom: var(--goal-position);
+  left: -6px;
+  border-top: 1px dashed rgba(67, 100, 88, 0.52);
+}
+
+.week-bar-track > span {
+  width: 100%;
+  min-height: 0;
+  border-radius: inherit;
+  background: linear-gradient(to top, #8dbbba, #b9d9d0);
+  transition: height 0.35s ease;
+}
+
+.week-bar-track > span.reached {
+  background: linear-gradient(to top, #8caf3f, #d0ea71);
+}
+
+.nutrition-week-day.selected .week-bar-track {
+  box-shadow: 0 0 0 3px rgba(203, 237, 99, 0.36);
+}
+
+.nutrition-week-day strong {
+  font-size: 0.82rem;
+}
+
+.nutrition-week-day small {
+  font-size: 0.72rem;
+}
+
+.nutrition-week-note {
+  margin: 14px 0 0;
+  color: #7a8781;
+  font-size: 0.82rem;
 }
 
 .hydration-card {
@@ -2905,10 +3129,6 @@ const deleteNutrition = async (nutritionId) => {
     display: none;
   }
 
-  .log-date-control {
-    width: 100%;
-  }
-
   .main-content {
     padding: 24px 16px 40px;
   }
@@ -2973,6 +3193,35 @@ const deleteNutrition = async (nutritionId) => {
     align-items: flex-start;
     flex-direction: column;
     gap: 5px;
+  }
+
+  .nutrition-week-heading,
+  .nutrition-week-stats {
+    flex-direction: column;
+  }
+
+  .nutrition-week-stats {
+    width: 100%;
+  }
+
+  .nutrition-week-stats span {
+    width: 100%;
+  }
+
+  .nutrition-week-card {
+    padding: 22px 16px;
+  }
+
+  .nutrition-week-chart {
+    margin-right: -8px;
+    margin-left: -8px;
+    padding-right: 4px;
+    padding-left: 4px;
+    gap: 5px;
+  }
+
+  .week-bar-track {
+    width: min(28px, 72%);
   }
 
   .goal-stats,
