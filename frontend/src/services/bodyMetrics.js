@@ -1,6 +1,7 @@
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
+import { BODY_METRICS_API_URL } from '../config/appConfig'
 
-const apiUrl = import.meta.env.VITE_BODY_METRICS_API_URL
+const apiUrl = BODY_METRICS_API_URL
 const storagePrefix = 'repvelta-body-metrics'
 const goalStoragePrefix = 'repvelta-body-goal'
 

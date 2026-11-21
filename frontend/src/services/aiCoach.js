@@ -1,7 +1,8 @@
 import { fetchAuthSession } from 'aws-amplify/auth'
 import { loadCurrentProfilePreferences } from './profilePreferences'
+import { AI_COACH_API_URL } from '../config/appConfig'
 
-const apiUrl = import.meta.env.VITE_AI_COACH_API_URL
+const apiUrl = AI_COACH_API_URL
 
 const getConversationContext = (messages = []) =>
   messages

@@ -16,6 +16,28 @@ RepVelta is a serverless fitness tracking and nutrition management web applicati
 
 RepVelta uses a serverless AWS architecture with services including Amazon S3, CloudFront, Cognito, API Gateway, AWS Lambda, DynamoDB, CloudWatch, and IAM.
 
+## Frontend configuration
+
+Copy `frontend/.env.example` to `frontend/.env` for local development. The shared
+API Gateway URL and Cognito identifiers are configured once and reused throughout
+the frontend:
+
+```text
+VITE_API_BASE_URL=https://your-api-id.execute-api.ap-southeast-2.amazonaws.com
+VITE_COGNITO_USER_POOL_ID=ap-southeast-2_example
+VITE_COGNITO_USER_POOL_CLIENT_ID=your-app-client-id
+```
+
+Feature-specific endpoints can be configured with `VITE_AI_COACH_API_URL`,
+`VITE_PLANS_API_URL`, `VITE_BODY_METRICS_API_URL`, and `VITE_PROFILE_API_URL`.
+The Cognito app client identifier is public application configuration; secrets
+such as the OpenAI API key must remain in AWS Secrets Manager and must never use
+a `VITE_` variable.
+
+Every push or pull request to `main` runs the GitHub Actions frontend workflow,
+which installs locked dependencies, lints the source, and creates a production
+build.
+
 ## AI Coach
 
 The AI Coach implementation is in `backend/ai-coach`. It uses the OpenAI Agents SDK inside AWS Lambda and exposes four read-only tools for profile goals, recent workouts, recent nutrition, and seven-day progress. A fifth tool can prepare an account-goal update, but it has no side effects: the user must review and approve the proposal in the app before it is saved. Helpful/not-helpful ratings and optional feedback notes are included in later turns so the Agent can revise its advice. Weekly plans and goal changes remain human-controlled.

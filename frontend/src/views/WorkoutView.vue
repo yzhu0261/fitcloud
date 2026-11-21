@@ -7,6 +7,7 @@ import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import AppIcon from '../components/AppIcon.vue'
 import DateNavigator from '../components/DateNavigator.vue'
+import { API_BASE_URL } from '../config/appConfig'
 import {
   getTodayPlanDay,
   loadWeeklyPlan,
@@ -224,7 +225,7 @@ const isPlanWorkout = computed(
 const displayedPlanDay = computed(() =>
   isPlanWorkout.value ? linkedPlanDay.value : isSelectedToday.value ? todayPlan.value : null,
 )
-const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
+const API_URL = API_BASE_URL
 const sortedWorkouts = computed(() =>
   [...workouts.value].sort((a, b) =>
     String(b.date ?? '').localeCompare(String(a.date ?? '')),

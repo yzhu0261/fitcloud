@@ -1,7 +1,8 @@
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
+import { PLANS_API_URL } from '../config/appConfig'
 
 const PLAN_UPDATED_EVENT = 'repvelta-weekly-plan-updated'
-const plansApiUrl = import.meta.env.VITE_PLANS_API_URL
+const plansApiUrl = PLANS_API_URL
 
 const toLocalDate = (date) => {
   const year = date.getFullYear()

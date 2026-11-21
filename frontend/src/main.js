@@ -5,12 +5,13 @@ import { Hub } from 'aws-amplify/utils'
 
 import App from './App.vue'
 import router from './router'
+import { COGNITO_CONFIG } from './config/appConfig'
 
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: 'ap-southeast-2_7RlVyqR3g',
-      userPoolClientId: '661p99brp1i82o1aa2ovagud0l',
+      userPoolId: COGNITO_CONFIG.userPoolId,
+      userPoolClientId: COGNITO_CONFIG.userPoolClientId,
     },
   },
 })

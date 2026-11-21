@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import UserAvatar from '../components/UserAvatar.vue'
+import { API_BASE_URL } from '../config/appConfig'
 import {
   deleteCurrentProfilePreferences,
   loadCurrentProfilePreferences,
@@ -73,7 +74,7 @@ const emailChangeError = ref('')
 const isUpdatingEmail = ref(false)
 const isResendingEmailCode = ref(false)
 
-const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
+const API_URL = API_BASE_URL
 
 const loadAccount = async () => {
   isLoading.value = true

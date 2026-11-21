@@ -6,6 +6,7 @@ import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import AppIcon from '../components/AppIcon.vue'
+import { apiEndpoint } from '../config/appConfig'
 import { loadBodyProgress } from '../services/bodyMetrics'
 import { loadCurrentProfilePreferences } from '../services/profilePreferences'
 import { hydrationUpdatedEvent, loadHydration } from '../services/hydration'
@@ -52,7 +53,7 @@ const loadWorkouts = async () => {
   }
 
   const response = await fetch(
-    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/workouts',
+    apiEndpoint('workouts'),
     {
       method: 'GET',
       headers: {
@@ -74,7 +75,7 @@ const loadNutrition = async () => {
   const idToken = session.tokens?.idToken?.toString()
 
   const response = await fetch(
-    'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+    apiEndpoint('nutrition'),
     {
       headers: { Authorization: `Bearer ${idToken}` },
     },

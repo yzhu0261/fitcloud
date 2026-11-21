@@ -7,8 +7,9 @@ import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import { loadBodyProgress } from '../services/bodyMetrics'
 import { loadHydrationHistory } from '../services/hydration'
+import { API_BASE_URL } from '../config/appConfig'
 
-const API_URL = 'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com'
+const API_URL = API_BASE_URL
 
 const router = useRouter()
 const workouts = ref([])

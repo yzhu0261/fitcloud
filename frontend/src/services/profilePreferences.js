@@ -1,8 +1,5 @@
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth'
-
-const PROFILE_API_URL =
-  import.meta.env.VITE_PROFILE_API_URL ||
-  'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/profile'
+import { PROFILE_API_URL } from '../config/appConfig'
 
 const DEFAULT_PROFILE = Object.freeze({
   profileConfigured: false,

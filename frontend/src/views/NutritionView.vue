@@ -690,6 +690,7 @@ import UserProfileBadge from '../components/UserProfileBadge.vue'
 import BrandMark from '../components/BrandMark.vue'
 import AppNavigation from '../components/AppNavigation.vue'
 import DateNavigator from '../components/DateNavigator.vue'
+import { apiEndpoint } from '../config/appConfig'
 import { loadCurrentProfilePreferences } from '../services/profilePreferences'
 import { loadHydration, saveHydration } from '../services/hydration'
 import {
@@ -1351,7 +1352,7 @@ const updateNutrition = async () => {
     if (!idToken) throw new Error('Your session has expired. Please sign in again.')
 
     const response = await fetch(
-      'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+      apiEndpoint('nutrition'),
       {
         method: 'PUT',
         headers: {
@@ -1394,7 +1395,7 @@ const loadNutrition = async () => {
     if (!idToken) throw new Error('Your session has expired. Please sign in again.')
 
     const response = await fetch(
-      'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+      apiEndpoint('nutrition'),
       {
         method: 'GET',
         headers: { Authorization: `Bearer ${idToken}` },
@@ -1504,7 +1505,7 @@ const saveNutrition = async () => {
     if (!idToken) throw new Error('Your session has expired. Please sign in again.')
 
     const response = await fetch(
-      'https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition',
+      apiEndpoint('nutrition'),
       {
         method: 'POST',
         headers: {
@@ -1552,7 +1553,7 @@ const deleteNutrition = async (nutritionId) => {
     if (!idToken) throw new Error('Your session has expired. Please sign in again.')
 
     const response = await fetch(
-      `https://jblazfcqug.execute-api.ap-southeast-2.amazonaws.com/nutrition/${encodeURIComponent(nutritionId)}`,
+      apiEndpoint(`nutrition/${encodeURIComponent(nutritionId)}`),
       {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${idToken}` },
